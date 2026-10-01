@@ -2,9 +2,9 @@
 
 ## GitHub Pages 部署檔
 
-將本資料夾內的 `index.html` 和 `juxiang-logo.png` 放在 GitHub Pages 儲存庫的發布根目錄。`程式碼.gs` 是原 Apps Script 入口檔；純 GitHub Pages 不需要它。
+網站檔案已發布於 [`vivievivie-cyber/pcces-bid-organizer`](https://github.com/vivievivie-cyber/pcces-bid-organizer)：`index.html`、`juxiang-logo.png` 與本說明文件。`程式碼.gs` 是原 Apps Script 入口檔；純 GitHub Pages 不需要它。
 
-尚未發布到現有 GitHub Pages，因為帳戶目前的 `vivievivie-cyber/-` 網站是消防排煙風量測試工具。請先指定要使用的新儲存庫名稱，避免覆蓋原網站。
+GitHub Pages 需在儲存庫設定中啟用 `main` 分支的根目錄作為發布來源；現有 `vivievivie-cyber/-` 消防排煙網站未變更。
 
 ## 已整理的功能
 
