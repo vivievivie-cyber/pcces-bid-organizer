@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <base target="_top">
+    <link href="https://fonts.googleapis.com/css2?family=Noto&#43;Sans&#43;TC:wght@400;500;700&amp;display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material&#43;Icons" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+    
+    <style>
+      :root { --primary: #14213d; --secondary: #237a57; --bg: #f4f6fa; --card: #fff; --border: #d8dee8; --formula: #e58a00; --cost: #b42318; }
+      body { font-family: 'Noto Sans TC', sans-serif; background: var(--bg); display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; margin: 0; padding: 20px; color: #333; }
+      .container { background: var(--card); border-radius: 12px; box-shadow: 0 4px 20px rgba(20,33,61,0.12); padding: 32px; width: 100%; max-width: 720px; text-align: center; margin-top: 20px; }
+      .brand { display:flex; align-items:center; justify-content:center; gap:14px; padding:16px 18px; margin:-32px -32px 24px; border-radius:12px 12px 0 0; background:#14213d; color:#fff; }
+      .brand img { width:58px; height:58px; object-fit:contain; background:transparent; border-radius:0; mix-blend-mode:screen; }
+      .brand-name { font-size:18px; font-weight:700; letter-spacing:.04em; }
+      h2 { color: var(--primary); margin: 0 0 25px; font-weight: 700; }
+      
+       
+      .section-title { text-align: left; font-weight: 700; color: #555; margin: 20px 0 10px 0; border-left: 4px solid var(--primary); padding-left: 10px; font-size: 16px; }
+
+      .input-group { margin-bottom: 15px; text-align: left; }
+      input[type="text"], input[type="file"], input[type="number"] { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+      
+       
+      .settings-box { background: #f1f3f4; padding: 15px; border-radius: 8px; text-align: left; margin-bottom: 20px; }
+      .checkbox-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+      .checkbox-item { display: flex; align-items: center; font-size: 14px; cursor: pointer; }
+      .checkbox-item input { margin-right: 8px; width: 18px; height: 18px; }
+      
+       
+      .custom-rule-input { display: flex; gap: 8px; margin-top: 10px; }
+      .custom-rule-input input { flex: 1; padding: 8px; font-size: 14px; }
+      .btn-add { background: #666; color: white; border: none; padding: 0 15px; border-radius: 6px; cursor: pointer; }
+      
+       
+      #custom_rule_list { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
+      .rule-tag { background: #e0e0e0; padding: 4px 10px; border-radius: 12px; font-size: 12px; display: flex; align-items: center; }
+      .rule-tag span { margin-left: 6px; cursor: pointer; color: #d93025; font-weight: bold; }
+
+       
+      .btn-group { display: flex; flex-direction: column; gap: 12px; margin-top: 25px; }
+      .action-btn { color: white; border: none; padding: 14px; border-radius: 8px; font-size: 16px; font-weight: 500; cursor: pointer; width: 100%; }
+      .btn-p { background: var(--primary); } .btn-s { background: var(--secondary); } .btn-f { background: var(--formula); } .btn-c { background: var(--cost); }
+      .action-btn:disabled { background: #ccc; cursor: not-allowed; }
+      
+      #status { margin-top: 20px; font-size: 14px; }
+      .success { color: var(--secondary); font-weight: bold; } .error { color: #d93025; }
+      .file-hint { color:#5b6472; font-size:13px; line-height:1.65; margin-top:7px; }
+      .app-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; line-height:1.7; color: #5b6472; }
+      @media (max-width:600px) { body { padding:10px; } .container { padding:22px 16px; margin-top:8px; } .brand { margin:-22px -16px 20px; } .checkbox-grid { grid-template-columns:1fr; } }
+    </style>
+  </head>
+  <body>
+
+    <div class="container">
+      <div class="brand"><img src="juxiang-logo.png" alt="巨祥科技有限公司標誌"><span class="brand-name">巨祥科技有限公司</span></div>
+      <h2><span class="material-icons" style="vertical-align: middle;">analytics</span> 標單整理與分析助手</h2>
+      
+      <div class="section-title">1. 基本設定</div>
+      <div class="input-group">
+        <input type="text" id="password" value="RAT********MPIZ" placeholder="解鎖密碼" onfocus="this.value=''" onblur="if(this.value=='')this.value='RAT********MPIZ'">
+      </div>
+      <div class="input-group">
+        <input type="file" id="file" accept=".xls,.xlsx">
+        <div class="file-hint">支援 PCCES .xls 與 .xlsx；輸出檔統一為 .xlsx。舊版 .xls 會先轉換，部分原始儲存格格式可能與來源不同。</div>
+      </div>
+
+      <div class="section-title">2. 費用性質關鍵字設定 (供按鈕1使用)</div>
+      <div class="settings-box">
+        <div class="checkbox-grid">
+           <label class="checkbox-item"><input type="checkbox" id="chk_wage" checked> 工資 (含人力)</label>
+           <label class="checkbox-item"><input type="checkbox" id="chk_install" checked> 施工費</label>
+           <label class="checkbox-item"><input type="checkbox" id="chk_transport" checked> 運雜費 (含運費)</label>
+           <label class="checkbox-item"><input type="checkbox" id="chk_other_part" checked> 另件</label>
+           <label class="checkbox-item"><input type="checkbox" id="chk_other_mat" checked> 另料</label>
+        </div>
+        
+        <div style="font-size:14px; color:#666; margin-bottom:5px;">新增自訂規則：</div>
+        <div class="custom-rule-input">
+           <input type="text" id="new_key" placeholder="關鍵字 (例: 吊車)">
+           <input type="text" id="new_cat" placeholder="分類 (例: 機具費)">
+           <button class="btn-add" onclick="addCustomRule()">新增</button>
+        </div>
+        <div id="custom_rule_list"></div>
+      </div>
+      
+      <div class="section-title">3. 報價參數設定 (供按鈕4使用)</div>
+      <div class="input-group">
+        <label style="font-size:14px; color:#666;">預設報價比率 (例: 1.2)</label>
+        <input type="number" id="quote_rate" value="1.2" step="0.05">
+      </div>
+
+      <div class="btn-group">
+        <button id="btn1" class="action-btn btn-s" onclick="runProcess('pivot')">1. 產出樞紐分析專用表</button>
+        <button id="btn2" class="action-btn btn-f" onclick="runProcess('formula')">2. 僅填入預算表公式 (無上色)</button>
+        <button id="btn3" class="action-btn btn-p" onclick="runProcess('format')">3. 執行合併與格式化 (含全表解鎖)</button>
+        <button id="btn4" class="action-btn btn-c" onclick="runProcess('cost_analysis')">4. 建立成本分析與報價表</button>
+      </div>
+
+      <div id="status"></div>
+      <div class="app-footer">©2026 巨祥科技有限公司。版權所有，未經授權禁止轉載或使用本網站內容。</div>
+    </div>
+
+    <script>
+      const REAL_PW = 'RATSWVNXYRCMPIZ';
+      let customRules = []; 
+
+      
+      function getSafeText(cell) {
+          if (!cell) return "";
+          const val = cell.value;
+          if (val === null || val === undefined) return "";
+          if (typeof val === 'object') {
+              if (val.richText && Array.isArray(val.richText)) return val.richText.map(p => p.text).join('');
+              if (val.result !== undefined) return String(val.result);
+              try { return val.toString(); } catch(e) { return ""; }
+          }
+          return String(val);
+      }
+
+      
+      function addCustomRule() {
+          const key = document.getElementById('new_key').value.trim();
+          const cat = document.getElementById('new_cat').value.trim();
+          if(!key || !cat) { alert("請輸入關鍵字與分類"); return; }
+          customRules.push({key, cat});
+          renderCustomRules();
+          document.getElementById('new_key').value = "";
+          document.getElementById('new_cat').value = "";
+      }
+
+      function removeCustomRule(index) {
+          customRules.splice(index, 1);
+          renderCustomRules();
+      }
+
+      function renderCustomRules() {
+          const list = document.getElementById('custom_rule_list');
+          list.innerHTML = customRules.map((r, i) => 
+              `<div class="rule-tag">${r.key} → ${r.cat} <span onclick="removeCustomRule(${i})">×</span></div>`
+          ).join('');
+      }
+
+      
+      const DATA_START_ROW = 9;
+      const REQUIRED_HEADERS = ["項次", "項目及說明", "單位", "數量", "單價", "複價"];
+
+      function normalizeHeader(text) {
+        return String(text || "").replace(/[\s　]/g, "").replace(/[.．:：]/g, "");
+      }
+
+      function numericValue(cell) {
+        if (!cell || cell.value === null || cell.value === undefined || cell.value === "") return null;
+        const value = typeof cell.value === "object" && cell.value.result !== undefined ? cell.value.result : cell.value;
+        const number = typeof value === "number" ? value : Number(String(value).replace(/,/g, "").trim());
+        return Number.isFinite(number) ? number : null;
+      }
+
+      function isItemRow(row) {
+        return getSafeText(row.getCell(1)).trim() !== "" && numericValue(row.getCell(4)) !== null;
+      }
+
+      function isSummaryRow(row) {
+        const a = getSafeText(row.getCell(1)).trim();
+        const b = getSafeText(row.getCell(2)).trim();
+        return !a && (/^(小計|合計|總計|總價)/.test(b) || row.getCell(6).value !== null && row.getCell(6).value !== undefined && row.getCell(6).value !== "");
+      }
+
+      function detectFileKind(file, buffer) {
+        const bytes = new Uint8Array(buffer);
+        const isZip = bytes[0] === 0x50 && bytes[1] === 0x4b;
+        const isOle = bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0;
+        const isBiff = bytes[0] === 0x09 && [0x08, 0x04, 0x02].includes(bytes[1]);
+        const extension = (file.name.match(/\.([^.]+)$/) || ["", ""])[1].toLowerCase();
+        if (!["xls", "xlsx"].includes(extension)) throw new Error("僅支援 .xls 或 .xlsx 檔案。");
+        if (isZip) return "xlsx";
+        if (isOle || isBiff) return "xls";
+        throw new Error("檔案內容不是可辨識的 Excel .xls/.xlsx 格式，請確認檔案沒有損毀或僅改副檔名。");
+      }
+
+      async function loadWorkbook(file, buffer) {
+        const kind = detectFileKind(file, buffer);
+        const workbook = new ExcelJS.Workbook();
+        if (kind === "xlsx") {
+          await workbook.xlsx.load(buffer);
+          return { workbook, kind };
+        }
+        const legacyWorkbook = XLSX.read(buffer, { type: "array", cellStyles: true, cellNF: true, cellFormula: true });
+        if (!legacyWorkbook.SheetNames || !legacyWorkbook.SheetNames.length) throw new Error(".xls 檔案沒有可讀取的工作表。");
+        const converted = XLSX.write(legacyWorkbook, { bookType: "xlsx", type: "array", cellStyles: true });
+        await workbook.xlsx.load(converted);
+        return { workbook, kind };
+      }
+
+      function validateWorkbook(workbook) {
+        const ws = workbook.getWorksheet("預算詳細表");
+        if (!ws) throw new Error("找不到名稱完全符合「預算詳細表」的工作表。請確認工作表名稱。");
+        const actual = REQUIRED_HEADERS.map((_, index) => normalizeHeader(getSafeText(ws.getRow(8).getCell(index + 1))));
+        const missing = REQUIRED_HEADERS.filter((header, index) => actual[index] !== normalizeHeader(header));
+        if (missing.length) throw new Error("第 8 列標題與預期格式不符（需有項次、項目及說明、單位、數量、單價、複價）。請確認上傳的是 PCCES 預算詳細表。");
+        return ws;
+      }
+
+      async function runProcess(mode) {
+        const pwInput = document.getElementById('password');
+        const pw = pwInput.value === 'RAT********MPIZ' ? REAL_PW : pwInput.value;
+        const fileInput = document.getElementById('file');
+        const status = document.getElementById('status');
+        if (pw !== REAL_PW) { status.innerHTML = '<span class="error">❌ 密碼錯誤</span>'; return; }
+        if (fileInput.files.length === 0) { status.innerHTML = '<span class="error">⚠️ 請選擇檔案</span>'; return; }
+
+        toggleUI(true);
+        status.innerText = '處理中...';
+        try {
+          const file = fileInput.files[0];
+          const buffer = await file.arrayBuffer();
+          const loaded = await loadWorkbook(file, buffer);
+          const workbook = loaded.workbook;
+          workbook.eachSheet(sheet => { if (typeof sheet.unprotect === "function") sheet.unprotect(); });
+          const worksheet = validateWorkbook(workbook);
+          await processBudgetSheet(worksheet);
+
+          if (mode === 'format') {
+            await downloadExcel(workbook, "_整理後.xlsx");
+            status.innerHTML = '<span class="success">✅ 整理完成！</span>';
+          } else if (mode === 'pivot') {
+            await createPivotData(workbook, worksheet);
+            await downloadExcel(workbook, "_含樞紐資料.xlsx");
+            status.innerHTML = '<span class="success">✅ 樞紐資料產出完成！</span>';
+          } else if (mode === 'formula') {
+            for (let i = DATA_START_ROW; i <= worksheet.rowCount; i++) {
+              const row = worksheet.getRow(i);
+              const id = getSafeText(row.getCell(1)).trim();
+              if (!id || isSummaryRow(row)) continue;
+              if (isItemRow(row)) row.getCell(6).value = { formula: `ROUND(D${i}*E${i}, 0)` };
+              else row.getCell(6).value = { formula: `SUMIFS(F:F, A:A, "${id}.*", D:D, "<>")` };
+            }
+            await downloadExcel(workbook, "_公式版(無色).xlsx");
+            status.innerHTML = '<span class="success">✅ 公式填入完成！</span>';
+          } else if (mode === 'cost_analysis') {
+            const rateValue = Number(document.getElementById('quote_rate').value);
+            const inputRate = Number.isFinite(rateValue) ? rateValue : 1.2;
+          const headers = ["比對結果", "預算數量", "廠商報價", "廠商報價複價", "報價比率", "數量比率", "調整後數量", "報價單價", "報價複價"];
+            headers.forEach((text, index) => {
+              worksheet.getCell(8, index + 8).value = text;
+            });
+            [12,13,15,12,12,15,13,15].forEach((width, index) => { worksheet.getColumn(index + 9).width = width; });
+            worksheet.getRow(8).height = Math.max(worksheet.getRow(8).height || 15, 30);
+            for (let col = 8; col <= 16; col++) {
+              const header = worksheet.getCell(8, col);
+              header.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+              header.font = { name: '新細明體', size: 11, bold: true, color: { argb: 'FF14213D' } };
+              header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF7' } };
+              header.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+            }
+            for (let i = DATA_START_ROW; i <= worksheet.rowCount; i++) {
+              const row = worksheet.getRow(i);
+              if (isItemRow(row)) {
+                row.getCell(9).value = { formula: `D${i}` };
+                row.getCell(11).value = { formula: `I${i}*J${i}` };
+                row.getCell(12).value = inputRate;
+                row.getCell(13).value = 1.0;
+                row.getCell(14).value = { formula: `I${i}*M${i}` };
+                row.getCell(15).value = { formula: `J${i}*L${i}` };
+                row.getCell(16).value = { formula: `N${i}*O${i}` };
+                row.getCell(5).value = { formula: `O${i}` };
+              } else if (isSummaryRow(row)) {
+                row.getCell(16).value = summaryPriceFormula(worksheet, i);
+              }
+              if (isItemRow(row) || isSummaryRow(row)) {
+                row.getCell(8).value = { formula: `IF(ROUND(F${i},2)=ROUND(P${i},2),"","金額不符")` };
+                for (let col = 9; col <= 16; col++) {
+                  const cell = row.getCell(col);
+                  cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+                  if ([9,10,11,14,15,16].includes(col)) cell.numFmt = '#,##0.00';
+                  if ([12,13].includes(col)) cell.numFmt = '0.00';
+                }
+              }
+            }
+            worksheet.addConditionalFormatting({
+              ref: `H${DATA_START_ROW}:H${worksheet.rowCount}`,
+              rules: [{ type: 'expression', formulae: [`AND(ISNUMBER($F${DATA_START_ROW}),ISNUMBER($P${DATA_START_ROW}),ROUND($F${DATA_START_ROW},2)<>ROUND($P${DATA_START_ROW},2))`], style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFFF00' } }, font: { color: { argb: 'FF000000' } } } }]
+            });
+            workbook.calcProperties.fullCalcOnLoad = true;
+            await downloadExcel(workbook, "_成本報價表.xlsx");
+            const conversionNotice = loaded.kind === "xls" ? " .xls 已轉為 .xlsx，請抽查原檔格式。" : "";
+            status.innerHTML = '<span class="success">✅ 成本分析表建立完成！' + conversionNotice + '</span>';
+          }
+        } catch (err) {
+          console.error(err);
+          status.innerHTML = '<span class="error">❌ ' + err.message + '</span>';
+        } finally {
+          toggleUI(false);
+        }
+      }
+
+      function summaryPriceFormula(ws, rowNumber) {
+        const row = ws.getRow(rowNumber);
+        const currentFormula = row.getCell(6).value;
+        if (currentFormula && typeof currentFormula === "object" && currentFormula.formula) {
+          return { formula: currentFormula.formula.replace(/\$?F(?=\$?\d|:)/g, match => match.includes("$") ? "$P" : "P") };
+        }
+        const title = getSafeText(row.getCell(2)).trim();
+        const marker = title.match(/^(?:小計|合計|總價|總計)[（(]([\s\S]+?)[）)]/);
+        if (marker) {
+          const target = marker[1].replace(/[\s　]/g, "");
+          const range = target.match(/^(.+?)[~～至](.+)$/);
+          if (range) {
+            const startParts = range[1].split(".");
+            const endParts = range[2].split(".");
+            const startNumber = pccesSegmentNumber(startParts[startParts.length - 1]);
+            const endNumber = pccesSegmentNumber(endParts[endParts.length - 1]);
+            const parentStart = startParts.slice(0, -1).join(".");
+            const parentEnd = endParts.slice(0, -1).join(".");
+            if (parentStart === parentEnd && startNumber !== null && endNumber !== null) {
+              const groups = new Set();
+              for (let i = DATA_START_ROW; i < rowNumber; i++) {
+                const code = getSafeText(ws.getRow(i).getCell(1)).trim();
+                const parts = code.split(".");
+                if (parts.length !== startParts.length || parts.slice(0, -1).join(".") !== parentStart) continue;
+                const segment = pccesSegmentNumber(parts[parts.length - 1]);
+                if (segment !== null && segment >= Math.min(startNumber, endNumber) && segment <= Math.max(startNumber, endNumber)) groups.add(code);
+              }
+              if (groups.size) return { formula: [...groups].map(code => `SUMIFS(P:P,A:A,"${code}*",D:D,"<>")`).join("+") };
+            }
+          }
+          for (let i = rowNumber - 1; i >= DATA_START_ROW; i--) {
+            const candidate = ws.getRow(i);
+            const code = getSafeText(candidate.getCell(1)).trim();
+            const description = getSafeText(candidate.getCell(2)).replace(/[\s　]/g, "");
+            if (code && numericValue(candidate.getCell(4)) === null && description && (target.includes(description) || description.includes(target))) {
+              return { formula: `SUMIFS(P:P,A:A,"${code}.*",D:D,"<>")` };
+            }
+          }
+        }
+        return { formula: `SUMIFS(P:P,A:A,"<>",D:D,"<>")` };
+      }
+
+      function remapFormulaRows(formula, mapRow) {
+        return formula.replace(/(\$?[A-Z]{1,3}\$?)(\d+)/g, (_, column, row) => column + mapRow(Number(row)));
+      }
+
+      function pccesSegmentNumber(value) {
+        const map = { '一':1, '二':2, '三':3, '四':4, '五':5, '六':6, '七':7, '八':8, '九':9, '十':10, '壹':1, '貳':2, '參':3, '肆':4, '伍':5, '陸':6, '柒':7, '捌':8, '玖':9, '拾':10 };
+        if (/^\d+$/.test(value)) return Number(value);
+        return map[value] ?? null;
+      }
+
+      async function processBudgetSheet(ws) {
+        const originalLastRow = ws.rowCount;
+        const formulas = [];
+        ws.eachRow({ includeEmpty: false }, (row, rowNumber) => row.eachCell({ includeEmpty: false }, cell => {
+          if (cell.value && typeof cell.value === "object" && cell.value.formula) formulas.push({ row: rowNumber, col: cell.col, value: { ...cell.value } });
+        }));
+        const removed = [];
+        for (let i = DATA_START_ROW; i <= originalLastRow; i++) {
+          const row = ws.getRow(i);
+          const id = getSafeText(row.getCell(1)).trim();
+          if (!id && !isSummaryRow(row)) {
+            const previous = ws.getRow(i - 1);
+            const currentB = getSafeText(row.getCell(2));
+            const currentG = getSafeText(row.getCell(7));
+            if (currentB) previous.getCell(2).value = [getSafeText(previous.getCell(2)), currentB].filter(Boolean).join('\n');
+            if (currentG) previous.getCell(7).value = [getSafeText(previous.getCell(7)), currentG].filter(Boolean).join('\n');
+            removed.push(i);
+          }
+        }
+        for (let i = removed.length - 1; i >= 0; i--) ws.spliceRows(removed[i], 1);
+        const mapRow = originalRow => originalRow < DATA_START_ROW ? originalRow : Math.max(DATA_START_ROW, originalRow - removed.filter(row => row < originalRow).length);
+        formulas.forEach(item => {
+          if (removed.includes(item.row)) return;
+          const destinationRow = mapRow(item.row);
+          const sourceFormula = item.value.formula;
+          const adjusted = remapFormulaRows(sourceFormula, mapRow);
+          ws.getRow(destinationRow).getCell(item.col).value = { ...item.value, formula: adjusted };
+        });
+        for (let i = 1; i <= 7; i++) ws.getRow(i).hidden = true;
+        const width = ws.getColumn(2).width || 36;
+        for (let i = DATA_START_ROW; i <= ws.rowCount; i++) {
+          const cell = ws.getRow(i).getCell(2);
+          cell.alignment = { ...cell.alignment, wrapText: true, shrinkToFit: false, vertical: 'middle' };
+          const text = getSafeText(cell);
+          const capacity = Math.max(12, Math.floor(width));
+          const lineBreaks = text.split('\n').reduce((sum, line) => sum + Math.max(1, Math.ceil(Array.from(line).reduce((n, char) => n + (/[^\u0000-\u00ff]/.test(char) ? 2 : 1), 0) / capacity)), 0);
+          if (text) ws.getRow(i).height = Math.max(ws.getRow(i).height || 15, lineBreaks * 15);
+        }
+      }
+
+      
+      async function createPivotData(wb, ws) {
+          const sn = "樞紐分析專用表"; 
+          const old = wb.getWorksheet(sn); 
+          if(old) wb.removeWorksheet(old.id);
+          const ps = wb.addWorksheet(sn);
+          const h = ["大項", "中項", "小項", "原項次", "項目", "單位", "數量", "單價", "複價", "性質", "列號"];
+          ps.getRow(1).values = h;
+          
+          const rules = [];
+          customRules.forEach(r => rules.push(r));
+          if(document.getElementById('chk_wage').checked) rules.push({key: "工資", cat: "工資"}, {key: "人力", cat: "工資"});
+          if(document.getElementById('chk_install').checked) rules.push({key: "施工費", cat: "施工費"}, {key: "安裝", cat: "施工費"});
+          if(document.getElementById('chk_transport').checked) rules.push({key: "運雜費", cat: "運雜費"}, {key: "運費", cat: "運雜費"});
+          if(document.getElementById('chk_other_part').checked) rules.push({key: "另件", cat: "另件"});
+          if(document.getElementById('chk_other_mat').checked) rules.push({key: "另料", cat: "另料"});
+
+          const rows = [];
+          let l1="", l2="", l3="";
+          for(let i=6; i<=ws.rowCount; i++) {
+             const r = ws.getRow(i);
+             const id = getSafeText(r.getCell(1)).trim();
+             const desc = getSafeText(r.getCell(2)).trim();
+             let pText = getSafeText(r.getCell(6)).replace(/,/g,'');
+             const price = parseFloat(pText); 
+             if(id && isItemRow(r)) {
+               const d = (id.match(/\./g)||[]).length;
+               if(d===1) {l1=desc;l2="";l3=""} 
+               else if(d===2) {l2=desc;l3=""} 
+               else if(d===3 && !id.includes("(")) l3=desc;
+             }
+             if(!isNaN(price) && price!=0 && isItemRow(r)) {
+                let cat = "一般";
+                for (const rule of rules) {
+                    if (desc.includes(rule.key)) {
+                        cat = rule.cat;
+                        break;
+                    }
+                }
+                const qty = r.getCell(4).value;
+                const unitPrice = r.getCell(5).value;
+                rows.push([l1,l2,l3,id,desc,getSafeText(r.getCell(3)), qty, unitPrice, price, cat, i]);
+             }
+          }
+          ps.addRows(rows);
+      }
+
+      async function downloadExcel(wb, suffix) {
+        const b = await wb.xlsx.writeBuffer();
+        const blob = new Blob([b], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+        let name = "result";
+        if(document.getElementById('file').files.length > 0) {
+            name = document.getElementById('file').files[0].name.replace(/\.xls(x)?$/i, "");
+        }
+        a.download = name + suffix;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      }
+
+      function toggleUI(loading) {
+         const btns = document.querySelectorAll('.action-btn');
+         btns.forEach(b => b.disabled = loading);
+      }
+    </script>
+  </body>
+</html>
