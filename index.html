@@ -6,7 +6,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto&#43;Sans&#43;TC:wght@400;500;700&amp;display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material&#43;Icons" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
     
     <style>
       :root { --primary: #14213d; --secondary: #237a57; --bg: #f4f6fa; --card: #fff; --border: #d8dee8; --cost: #b42318; }
@@ -63,8 +62,8 @@
         <input type="text" id="password" value="RAT********MPIZ" placeholder="解鎖密碼" onfocus="this.value=''" onblur="if(this.value=='')this.value='RAT********MPIZ'">
       </div>
       <div class="input-group">
-        <input type="file" id="file" accept=".xls,.xlsx">
-        <div class="file-hint">功能1僅接受 .xlsx；功能2、3僅接受 PCCES .xls。整理結果都會另存為新的 .xlsx。</div>
+        <input type="file" id="file" accept=".xlsx">
+        <div class="file-hint">三個功能都僅接受 .xlsx，整理結果也會另存為新的 .xlsx。</div>
       </div>
 
       <div class="section-title">2. 費用性質關鍵字設定 (供功能3使用)</div>
@@ -94,8 +93,8 @@
 
       <div class="btn-group">
         <button id="btn1" class="action-btn btn-p" onclick="runProcess('format')">1. 執行合併與格式化 (限 XLSX)</button>
-        <button id="btn2" class="action-btn btn-c" onclick="runProcess('cost_analysis')">2. 建立成本分析與報價表 (限 PCCES XLS)</button>
-        <button id="btn3" class="action-btn btn-s" onclick="runProcess('pivot')">3. 產出樞紐分析專用表 (限 PCCES XLS)</button>
+        <button id="btn2" class="action-btn btn-c" onclick="runProcess('cost_analysis')">2. 建立成本分析與報價表 (限 XLSX)</button>
+        <button id="btn3" class="action-btn btn-s" onclick="runProcess('pivot')">3. 產出樞紐分析專用表 (限 XLSX)</button>
       </div>
 
       <div id="status"></div>
@@ -175,36 +174,23 @@
         return !a && (/^(小計|合計|總計|總價)/.test(b) || row.getCell(6).value !== null && row.getCell(6).value !== undefined && row.getCell(6).value !== "");
       }
 
-      function detectFileKind(file, buffer, requiredKind) {
+      function detectFileKind(file, buffer) {
         const bytes = new Uint8Array(buffer);
         const isZip = bytes[0] === 0x50 && bytes[1] === 0x4b;
-        const isOle = bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0;
-        const isBiff = bytes[0] === 0x09 && [0x08, 0x04, 0x02].includes(bytes[1]);
         const extension = (file.name.match(/\.([^.]+)$/) || ["", ""])[1].toLowerCase();
-        let kind = "";
-        if (isZip) kind = "xlsx";
-        else if (isOle || isBiff) kind = "xls";
-        else throw new Error("檔案內容不是可辨識的 Excel .XLS 或 .XLSX 格式，請確認檔案沒有損毀。");
-        if (extension !== kind) throw new Error(`副檔名是 .${extension || "未知"}，但檔案內容是 .${kind.toUpperCase()}；請勿只修改副檔名。`);
-        if (kind !== requiredKind) {
-          if (requiredKind === "xlsx") throw new Error("功能1僅接受 .XLSX 檔案。");
-          throw new Error("功能2、3僅接受真正的 PCCES .XLS 檔案。");
-        }
-        return kind;
+        if (extension !== "xlsx") throw new Error("三個功能都僅接受副檔名為 .XLSX 的檔案。");
+        if (!isZip) throw new Error("檔案內容不是正確的 .XLSX 格式，請確認檔案沒有損毀或只修改副檔名。");
       }
 
-      async function loadWorkbook(file, buffer, requiredKind) {
-        const kind = detectFileKind(file, buffer, requiredKind);
+      async function loadWorkbook(file, buffer) {
+        detectFileKind(file, buffer);
         const workbook = new ExcelJS.Workbook();
-        if (kind === "xlsx") {
+        try {
           await workbook.xlsx.load(buffer);
-          return { workbook, kind };
+        } catch (error) {
+          throw new Error(".XLSX 檔案無法讀取，請確認檔案內容及格式是否完整。");
         }
-        const legacyWorkbook = XLSX.read(buffer, { type: "array", cellStyles: true, cellNF: true, cellFormula: true });
-        if (!legacyWorkbook.SheetNames || !legacyWorkbook.SheetNames.length) throw new Error(".xls 檔案沒有可讀取的工作表。");
-        const converted = XLSX.write(legacyWorkbook, { bookType: "xlsx", type: "array", cellStyles: true });
-        await workbook.xlsx.load(converted);
-        return { workbook, kind };
+        return workbook;
       }
 
       function validateWorkbook(workbook) {
@@ -229,9 +215,7 @@
         try {
           const file = fileInput.files[0];
           const buffer = await file.arrayBuffer();
-          const requiredKind = mode === 'format' ? 'xlsx' : 'xls';
-          const loaded = await loadWorkbook(file, buffer, requiredKind);
-          const workbook = loaded.workbook;
+          const workbook = await loadWorkbook(file, buffer);
           workbook.eachSheet(sheet => { if (typeof sheet.unprotect === "function") sheet.unprotect(); });
           const worksheet = validateWorkbook(workbook);
           await processBudgetSheet(worksheet);
@@ -293,8 +277,7 @@
             });
             workbook.calcProperties.fullCalcOnLoad = true;
             await downloadExcel(workbook, "_成本報價表.xlsx");
-            const conversionNotice = loaded.kind === "xls" ? " .xls 已轉為 .xlsx，請抽查原檔格式。" : "";
-            status.innerHTML = '<span class="success">✅ 成本分析表建立完成！' + conversionNotice + '</span>';
+            status.innerHTML = '<span class="success">✅ 成本分析表建立完成！</span>';
           }
         } catch (err) {
           console.error(err);
