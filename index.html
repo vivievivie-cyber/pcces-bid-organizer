@@ -9,7 +9,7 @@
     <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
     
     <style>
-      :root { --primary: #14213d; --secondary: #237a57; --bg: #f4f6fa; --card: #fff; --border: #d8dee8; --formula: #e58a00; --cost: #b42318; }
+      :root { --primary: #14213d; --secondary: #237a57; --bg: #f4f6fa; --card: #fff; --border: #d8dee8; --cost: #b42318; }
       body { font-family: 'Noto Sans TC', sans-serif; background: var(--bg); display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; margin: 0; padding: 20px; color: #333; }
       .container { background: var(--card); border-radius: 12px; box-shadow: 0 4px 20px rgba(20,33,61,0.12); padding: 32px; width: 100%; max-width: 720px; text-align: center; margin-top: 20px; }
       .brand { display:flex; align-items:center; justify-content:center; gap:14px; padding:16px 18px; margin:-32px -32px 24px; border-radius:12px 12px 0 0; background:#14213d; color:#fff; }
@@ -42,7 +42,7 @@
        
       .btn-group { display: flex; flex-direction: column; gap: 12px; margin-top: 25px; }
       .action-btn { color: white; border: none; padding: 14px; border-radius: 8px; font-size: 16px; font-weight: 500; cursor: pointer; width: 100%; }
-      .btn-p { background: var(--primary); } .btn-s { background: var(--secondary); } .btn-f { background: var(--formula); } .btn-c { background: var(--cost); }
+      .btn-p { background: var(--primary); } .btn-s { background: var(--secondary); } .btn-c { background: var(--cost); }
       .action-btn:disabled { background: #ccc; cursor: not-allowed; }
       
       #status { margin-top: 20px; font-size: 14px; }
@@ -86,7 +86,7 @@
         <div id="custom_rule_list"></div>
       </div>
       
-      <div class="section-title">3. 報價參數設定 (供按鈕4使用)</div>
+      <div class="section-title">3. 報價參數設定 (供功能3使用)</div>
       <div class="input-group">
         <label style="font-size:14px; color:#666;">預設報價比率 (例: 1.2)</label>
         <input type="number" id="quote_rate" value="1.2" step="0.05">
@@ -94,9 +94,8 @@
 
       <div class="btn-group">
         <button id="btn1" class="action-btn btn-s" onclick="runProcess('pivot')">1. 產出樞紐分析專用表</button>
-        <button id="btn2" class="action-btn btn-f" onclick="runProcess('formula')">2. 僅填入預算表公式 (無上色)</button>
-        <button id="btn3" class="action-btn btn-p" onclick="runProcess('format')">3. 執行合併與格式化 (含全表解鎖)</button>
-        <button id="btn4" class="action-btn btn-c" onclick="runProcess('cost_analysis')">4. 建立成本分析與報價表</button>
+        <button id="btn2" class="action-btn btn-p" onclick="runProcess('format')">2. 執行合併與格式化 (含全表解鎖)</button>
+        <button id="btn3" class="action-btn btn-c" onclick="runProcess('cost_analysis')">3. 建立成本分析與報價表</button>
       </div>
 
       <div id="status"></div>
@@ -160,6 +159,14 @@
 
       function isItemRow(row) {
         return getSafeText(row.getCell(1)).trim() !== "" && numericValue(row.getCell(4)) !== null;
+      }
+
+      function isCategoryRow(row) {
+        return getSafeText(row.getCell(1)).trim() !== "" && numericValue(row.getCell(4)) === null;
+      }
+
+      function escapeFormulaText(text) {
+        return String(text).replace(/"/g, '""');
       }
 
       function isSummaryRow(row) {
@@ -229,16 +236,6 @@
             await createPivotData(workbook, worksheet);
             await downloadExcel(workbook, "_含樞紐資料.xlsx");
             status.innerHTML = '<span class="success">✅ 樞紐資料產出完成！</span>';
-          } else if (mode === 'formula') {
-            for (let i = DATA_START_ROW; i <= worksheet.rowCount; i++) {
-              const row = worksheet.getRow(i);
-              const id = getSafeText(row.getCell(1)).trim();
-              if (!id || isSummaryRow(row)) continue;
-              if (isItemRow(row)) row.getCell(6).value = { formula: `ROUND(D${i}*E${i}, 0)` };
-              else row.getCell(6).value = { formula: `SUMIFS(F:F, A:A, "${id}.*", D:D, "<>")` };
-            }
-            await downloadExcel(workbook, "_公式版(無色).xlsx");
-            status.innerHTML = '<span class="success">✅ 公式填入完成！</span>';
           } else if (mode === 'cost_analysis') {
             const rateValue = Number(document.getElementById('quote_rate').value);
             const inputRate = Number.isFinite(rateValue) ? rateValue : 1.2;
@@ -255,6 +252,7 @@
             }
             for (let i = DATA_START_ROW; i <= worksheet.rowCount; i++) {
               const row = worksheet.getRow(i);
+              const id = getSafeText(row.getCell(1)).trim();
               if (isItemRow(row)) {
                 row.getCell(9).value = { formula: `D${i}` };
                 row.getCell(11).value = { formula: `I${i}*J${i}` };
@@ -264,6 +262,9 @@
                 row.getCell(15).value = { formula: `J${i}*L${i}` };
                 row.getCell(16).value = { formula: `N${i}*O${i}` };
                 row.getCell(5).value = { formula: `O${i}` };
+                row.getCell(6).value = { formula: `ROUND(D${i}*E${i},0)` };
+              } else if (isCategoryRow(row)) {
+                row.getCell(6).value = { formula: `SUMIFS(F:F,A:A,"${escapeFormulaText(id)}.*",D:D,"<>")` };
               } else if (isSummaryRow(row)) {
                 row.getCell(16).value = summaryPriceFormula(worksheet, i);
               }
@@ -518,7 +519,7 @@
              const desc = getSafeText(r.getCell(2)).trim();
              let pText = getSafeText(r.getCell(6)).replace(/,/g,'');
              const price = parseFloat(pText); 
-             if(id && isItemRow(r)) {
+             if(id && isCategoryRow(r)) {
                const d = (id.match(/\./g)||[]).length;
                if(d===1) {l1=desc;l2="";l3=""} 
                else if(d===2) {l2=desc;l3=""} 
