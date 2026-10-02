@@ -63,11 +63,11 @@
         <input type="text" id="password" value="RAT********MPIZ" placeholder="解鎖密碼" onfocus="this.value=''" onblur="if(this.value=='')this.value='RAT********MPIZ'">
       </div>
       <div class="input-group">
-        <input type="file" id="file" accept=".xls">
-        <div class="file-hint">僅支援 PCCES .xls；整理結果會另存為 .xlsx。舊版 .xls 轉換後，請抽查原始儲存格格式。</div>
+        <input type="file" id="file" accept=".xls,.xlsx">
+        <div class="file-hint">功能1僅接受 .xlsx；功能2、3僅接受 PCCES .xls。整理結果都會另存為新的 .xlsx。</div>
       </div>
 
-      <div class="section-title">2. 費用性質關鍵字設定 (供按鈕1使用)</div>
+      <div class="section-title">2. 費用性質關鍵字設定 (供功能3使用)</div>
       <div class="settings-box">
         <div class="checkbox-grid">
            <label class="checkbox-item"><input type="checkbox" id="chk_wage" checked> 工資 (含人力)</label>
@@ -86,16 +86,16 @@
         <div id="custom_rule_list"></div>
       </div>
       
-      <div class="section-title">3. 報價參數設定 (供功能3使用)</div>
+      <div class="section-title">3. 報價參數設定 (供功能2使用)</div>
       <div class="input-group">
         <label style="font-size:14px; color:#666;">預設報價比率 (例: 1.2)</label>
         <input type="number" id="quote_rate" value="1.2" step="0.05">
       </div>
 
       <div class="btn-group">
-        <button id="btn1" class="action-btn btn-s" onclick="runProcess('pivot')">1. 產出樞紐分析專用表</button>
-        <button id="btn2" class="action-btn btn-p" onclick="runProcess('format')">2. 執行合併與格式化 (含全表解鎖)</button>
-        <button id="btn3" class="action-btn btn-c" onclick="runProcess('cost_analysis')">3. 建立成本分析與報價表</button>
+        <button id="btn1" class="action-btn btn-p" onclick="runProcess('format')">1. 執行合併與格式化 (限 XLSX)</button>
+        <button id="btn2" class="action-btn btn-c" onclick="runProcess('cost_analysis')">2. 建立成本分析與報價表 (限 PCCES XLS)</button>
+        <button id="btn3" class="action-btn btn-s" onclick="runProcess('pivot')">3. 產出樞紐分析專用表 (限 PCCES XLS)</button>
       </div>
 
       <div id="status"></div>
@@ -175,20 +175,26 @@
         return !a && (/^(小計|合計|總計|總價)/.test(b) || row.getCell(6).value !== null && row.getCell(6).value !== undefined && row.getCell(6).value !== "");
       }
 
-      function detectFileKind(file, buffer) {
+      function detectFileKind(file, buffer, requiredKind) {
         const bytes = new Uint8Array(buffer);
         const isZip = bytes[0] === 0x50 && bytes[1] === 0x4b;
         const isOle = bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0;
         const isBiff = bytes[0] === 0x09 && [0x08, 0x04, 0x02].includes(bytes[1]);
         const extension = (file.name.match(/\.([^.]+)$/) || ["", ""])[1].toLowerCase();
-        if (extension !== "xls") throw new Error("目前僅支援副檔名為 .XLS 的 PCCES 檔案。");
-        if (isZip) throw new Error("檔案內容是 .XLSX 格式；目前只接受真正的 PCCES .XLS 檔案。");
-        if (isOle || isBiff) return "xls";
-        throw new Error("檔案內容不是可辨識的 Excel .XLS 格式，請確認檔案沒有損毀或僅修改副檔名。");
+        let kind = "";
+        if (isZip) kind = "xlsx";
+        else if (isOle || isBiff) kind = "xls";
+        else throw new Error("檔案內容不是可辨識的 Excel .XLS 或 .XLSX 格式，請確認檔案沒有損毀。");
+        if (extension !== kind) throw new Error(`副檔名是 .${extension || "未知"}，但檔案內容是 .${kind.toUpperCase()}；請勿只修改副檔名。`);
+        if (kind !== requiredKind) {
+          if (requiredKind === "xlsx") throw new Error("功能1僅接受 .XLSX 檔案。");
+          throw new Error("功能2、3僅接受真正的 PCCES .XLS 檔案。");
+        }
+        return kind;
       }
 
-      async function loadWorkbook(file, buffer) {
-        const kind = detectFileKind(file, buffer);
+      async function loadWorkbook(file, buffer, requiredKind) {
+        const kind = detectFileKind(file, buffer, requiredKind);
         const workbook = new ExcelJS.Workbook();
         if (kind === "xlsx") {
           await workbook.xlsx.load(buffer);
@@ -223,7 +229,8 @@
         try {
           const file = fileInput.files[0];
           const buffer = await file.arrayBuffer();
-          const loaded = await loadWorkbook(file, buffer);
+          const requiredKind = mode === 'format' ? 'xlsx' : 'xls';
+          const loaded = await loadWorkbook(file, buffer, requiredKind);
           const workbook = loaded.workbook;
           workbook.eachSheet(sheet => { if (typeof sheet.unprotect === "function") sheet.unprotect(); });
           const worksheet = validateWorkbook(workbook);
