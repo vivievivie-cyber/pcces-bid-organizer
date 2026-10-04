@@ -2,7 +2,9 @@
 <html>
   <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <base target="_top">
+    <title>PCCES 標單整理助手</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto&#43;Sans&#43;TC:wght@400;500;700&amp;display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material&#43;Icons" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
@@ -18,6 +20,10 @@
       
        
       .section-title { text-align: left; font-weight: 700; color: #555; margin: 20px 0 10px 0; border-left: 4px solid var(--primary); padding-left: 10px; font-size: 16px; }
+      .section-heading { display:flex; align-items:center; justify-content:flex-start; gap:12px; margin:20px 0 12px; }
+      .section-heading .section-title { margin:0; flex:0 0 auto; }
+      .help-btn { border:1px solid #9aa7ba; background:#fff; color:var(--primary); border-radius:6px; padding:7px 12px; font-size:14px; font-weight:700; cursor:pointer; white-space:nowrap; }
+      .help-btn:hover, .help-btn:focus-visible { background:#eef3fa; outline:2px solid transparent; }
 
       .input-group { margin-bottom: 15px; text-align: left; }
       input[type="text"], input[type="file"], input[type="number"] { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; box-sizing: border-box; font-size: 16px; }
@@ -48,7 +54,20 @@
       .success { color: var(--secondary); font-weight: bold; } .error { color: #d93025; }
       .file-hint { color:#5b6472; font-size:13px; line-height:1.65; margin-top:7px; }
       .app-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; line-height:1.7; color: #5b6472; }
-      @media (max-width:600px) { body { padding:10px; } .container { padding:22px 16px; margin-top:8px; } .brand { margin:-22px -16px 20px; } .checkbox-grid { grid-template-columns:1fr; } }
+      .modal-backdrop { position:fixed; inset:0; z-index:1000; display:none; align-items:center; justify-content:center; padding:20px; background:rgba(15,23,42,.58); }
+      .modal-backdrop.is-open { display:flex; }
+      .help-modal { width:min(680px, 100%); max-height:min(82vh, 760px); overflow:auto; background:#fff; border-radius:8px; box-shadow:0 22px 60px rgba(15,23,42,.28); text-align:left; }
+      .help-modal-header { position:sticky; top:0; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:18px 22px; color:#fff; background:var(--primary); z-index:1; }
+      .help-modal-header h3 { margin:0; font-size:19px; }
+      .modal-close { width:34px; height:34px; border:0; border-radius:6px; background:rgba(255,255,255,.12); color:#fff; font-size:24px; line-height:1; cursor:pointer; }
+      .help-modal-body { padding:22px; color:#394150; line-height:1.75; }
+      .help-modal-body h4 { margin:20px 0 8px; color:var(--primary); font-size:16px; }
+      .help-modal-body h4:first-child { margin-top:0; }
+      .help-modal-body ol, .help-modal-body ul { margin:8px 0; padding-left:24px; }
+      .help-modal-body li { margin:5px 0; }
+      .legend { display:grid; grid-template-columns:auto 1fr; gap:7px 10px; align-items:center; }
+      .legend-swatch { width:38px; height:20px; border:1px solid #c8ced8; border-radius:3px; }
+      @media (max-width:600px) { body { padding:10px; } .container { padding:22px 16px; margin-top:8px; } .brand { margin:-22px -16px 20px; } .checkbox-grid { grid-template-columns:1fr; } .section-heading { align-items:center; } .modal-backdrop { padding:10px; } .help-modal-body { padding:18px; } }
     </style>
   </head>
   <body>
@@ -57,13 +76,16 @@
       <div class="brand"><img src="juxiang-logo.png" alt="巨祥科技有限公司標誌"><span class="brand-name">巨祥科技有限公司</span></div>
       <h2><span class="material-icons" style="vertical-align: middle;">analytics</span> 標單整理與分析助手</h2>
       
-      <div class="section-title">1. 基本設定</div>
+      <div class="section-heading">
+        <div class="section-title">1. 基本設定</div>
+        <button type="button" class="help-btn" onclick="openHelp()" aria-haspopup="dialog" aria-controls="helpModal">使用說明</button>
+      </div>
       <div class="input-group">
         <input type="text" id="password" value="RAT********MPIZ" placeholder="解鎖密碼" onfocus="this.value=''" onblur="if(this.value=='')this.value='RAT********MPIZ'">
       </div>
       <div class="input-group">
-        <input type="file" id="file" accept=".xlsx">
-        <div class="file-hint">三個功能都僅接受 .xlsx，整理結果也會另存為新的 .xlsx。</div>
+        <input type="file" id="file" accept=".xlsx" hidden onchange="handleFileSelected(event)">
+        <div class="file-hint">請直接點選下方功能，再選擇 .xlsx 檔案。整理結果會另存為新的 .xlsx，不會覆寫原始檔。</div>
       </div>
 
       <div class="section-title">2. 費用性質關鍵字設定 (供功能3使用)</div>
@@ -92,18 +114,82 @@
       </div>
 
       <div class="btn-group">
-        <button id="btn1" class="action-btn btn-p" onclick="runProcess('format')">1. 執行合併與格式化 (限 XLSX)</button>
-        <button id="btn2" class="action-btn btn-c" onclick="runProcess('cost_analysis')">2. 建立成本分析與報價表 (限 XLSX)</button>
-        <button id="btn3" class="action-btn btn-s" onclick="runProcess('pivot')">3. 產出樞紐分析專用表 (限 XLSX)</button>
+        <button id="btn1" class="action-btn btn-p" onclick="chooseFileAndRun('format')">1. 執行合併與格式化 (限 XLSX)</button>
+        <button id="btn2" class="action-btn btn-c" onclick="chooseFileAndRun('cost_analysis')">2. 建立成本分析與報價表 (限 XLSX)</button>
+        <button id="btn3" class="action-btn btn-s" onclick="chooseFileAndRun('pivot')">3. 產出樞紐分析專用表 (限 XLSX)</button>
       </div>
 
       <div id="status"></div>
       <div class="app-footer">©2026 巨祥科技有限公司。版權所有，未經授權禁止轉載或使用本網站內容。</div>
     </div>
 
+    <div id="helpModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="helpTitle" onclick="if(event.target === this) closeHelp()">
+      <div class="help-modal">
+        <div class="help-modal-header">
+          <h3 id="helpTitle">標單整理與分析助手使用說明</h3>
+          <button type="button" class="modal-close" onclick="closeHelp()" aria-label="關閉使用說明">×</button>
+        </div>
+        <div class="help-modal-body">
+          <h4>操作方式</h4>
+          <ol>
+            <li>確認解鎖密碼，並依需要設定功能2的報價比率或功能3的費用性質規則。</li>
+            <li>直接點選功能1、功能2或功能3，系統會開啟檔案選擇視窗。</li>
+            <li>選擇PCCES的 .xlsx 檔案後，系統會檢查工作表與第8列標題，再開始處理。</li>
+            <li>完成後會下載新的 .xlsx；原始檔案不會被修改或覆寫。</li>
+          </ol>
+
+          <h4>功能1：合併與格式化</h4>
+          <ul>
+            <li>保留「預算詳細表」中的小計、合計及總計列，不以A欄空白作為刪除條件。</li>
+            <li>依A欄編號的階層辨識全部工程分類。第二層為總計、第三層為合計、第四層為小計。</li>
+            <li>分類名稱保留在階層開頭；小計、合計及總計放在各階層最後一筆明細的下一列。</li>
+            <li>優先修正位於階層末端的既有摘要列；缺少摘要列時才新增一列，不會在同一階層重複新增。</li>
+            <li>加總公式只納入具有數量的實際明細，避免重複計入下層小計與合計。</li>
+            <li>B欄自動換行並依文字調整列高，欄寬維持原檔設定；第1至第7列會隱藏。</li>
+            <li>三個功能都會將「預算詳細表」凍結在D9，固定第1至第8列及A至C欄。</li>
+          </ul>
+          <div class="legend" aria-label="摘要列顏色說明">
+            <span class="legend-swatch" style="background:#fff2cc"></span><span>小計：淺黃色</span>
+            <span class="legend-swatch" style="background:#ddebf7"></span><span>合計：淺藍色</span>
+            <span class="legend-swatch" style="background:#fce4d6"></span><span>總計：淺橘色</span>
+          </div>
+
+          <h4>功能2：成本分析與報價表</h4>
+          <p>在第8列後方建立成本與報價欄位。O欄報價單價使用ROUND四捨五入；P欄明細及所有小計、合計、總計都會依所屬階層計算，再與F欄進行金額比對。</p>
+
+          <h4>功能3：樞紐分析專用表</h4>
+          <p>依費用性質關鍵字整理明細，新增「樞紐分析專用表」工作表，供後續篩選與分析使用。</p>
+
+          <h4>檔案條件</h4>
+          <p>三個功能都只接受內容完整的 .xlsx 檔案，且必須包含名稱完全相同的「預算詳細表」工作表及正確的第8列標題。</p>
+        </div>
+      </div>
+    </div>
+
     <script>
       const REAL_PW = 'RATSWVNXYRCMPIZ';
       let customRules = []; 
+      let pendingMode = null;
+      let helpTrigger = null;
+
+      function openHelp() {
+        helpTrigger = document.activeElement;
+        const modal = document.getElementById('helpModal');
+        modal.classList.add('is-open');
+        document.body.style.overflow = 'hidden';
+        modal.querySelector('.modal-close').focus();
+      }
+
+      function closeHelp() {
+        const modal = document.getElementById('helpModal');
+        modal.classList.remove('is-open');
+        document.body.style.overflow = '';
+        if (helpTrigger && typeof helpTrigger.focus === 'function') helpTrigger.focus();
+      }
+
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && document.getElementById('helpModal').classList.contains('is-open')) closeHelp();
+      });
 
       
       function getSafeText(cell) {
@@ -202,30 +288,44 @@
         return ws;
       }
 
-      async function runProcess(mode) {
+      function chooseFileAndRun(mode) {
         const pwInput = document.getElementById('password');
         const pw = pwInput.value === 'RAT********MPIZ' ? REAL_PW : pwInput.value;
-        const fileInput = document.getElementById('file');
         const status = document.getElementById('status');
         if (pw !== REAL_PW) { status.innerHTML = '<span class="error">❌ 密碼錯誤</span>'; return; }
-        if (fileInput.files.length === 0) { status.innerHTML = '<span class="error">⚠️ 請選擇檔案</span>'; return; }
+        pendingMode = mode;
+        const fileInput = document.getElementById('file');
+        fileInput.value = '';
+        fileInput.click();
+      }
+
+      function handleFileSelected(event) {
+        const file = event.target.files && event.target.files[0];
+        const mode = pendingMode;
+        pendingMode = null;
+        if (!file || !mode) return;
+        runProcess(mode, file);
+      }
+
+      async function runProcess(mode, file) {
+        const status = document.getElementById('status');
 
         toggleUI(true);
-        status.innerText = '處理中...';
+        status.innerText = `正在處理 ${file.name}...`;
         try {
-          const file = fileInput.files[0];
           const buffer = await file.arrayBuffer();
           const workbook = await loadWorkbook(file, buffer);
           workbook.eachSheet(sheet => { if (typeof sheet.unprotect === "function") sheet.unprotect(); });
           const worksheet = validateWorkbook(workbook);
-          await processBudgetSheet(worksheet);
+          await processBudgetSheet(worksheet, { repairHierarchy: mode === 'format' || mode === 'cost_analysis' });
 
           if (mode === 'format') {
-            await downloadExcel(workbook, "_整理後.xlsx");
+            workbook.calcProperties.fullCalcOnLoad = true;
+            await downloadExcel(workbook, "_整理後.xlsx", file);
             status.innerHTML = '<span class="success">✅ 整理完成！</span>';
           } else if (mode === 'pivot') {
             await createPivotData(workbook, worksheet);
-            await downloadExcel(workbook, "_含樞紐資料.xlsx");
+            await downloadExcel(workbook, "_含樞紐資料.xlsx", file);
             status.innerHTML = '<span class="success">✅ 樞紐資料產出完成！</span>';
           } else if (mode === 'cost_analysis') {
             const rateValue = Number(document.getElementById('quote_rate').value);
@@ -250,12 +350,10 @@
                 row.getCell(12).value = inputRate;
                 row.getCell(13).value = 1.0;
                 row.getCell(14).value = { formula: `I${i}*M${i}` };
-                row.getCell(15).value = { formula: `J${i}*L${i}` };
+                row.getCell(15).value = { formula: `ROUND(J${i}*L${i},0)` };
                 row.getCell(16).value = { formula: `N${i}*O${i}` };
                 row.getCell(5).value = { formula: `O${i}` };
                 row.getCell(6).value = { formula: `ROUND(D${i}*E${i},0)` };
-              } else if (isCategoryRow(row)) {
-                row.getCell(6).value = { formula: `SUMIFS(F:F,A:A,"${escapeFormulaText(id)}.*",D:D,"<>")` };
               } else if (isSummaryRow(row)) {
                 row.getCell(16).value = summaryPriceFormula(worksheet, i);
               }
@@ -276,7 +374,7 @@
               rules: [{ type: 'expression', formulae: [`AND(ISNUMBER($F${DATA_START_ROW}),ISNUMBER($P${DATA_START_ROW}),ROUND($F${DATA_START_ROW},2)<>ROUND($P${DATA_START_ROW},2))`], style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFFF00' } }, font: { color: { argb: 'FF000000' } } } }]
             });
             workbook.calcProperties.fullCalcOnLoad = true;
-            await downloadExcel(workbook, "_成本報價表.xlsx");
+            await downloadExcel(workbook, "_成本報價表.xlsx", file);
             status.innerHTML = '<span class="success">✅ 成本分析表建立完成！</span>';
           }
         } catch (err) {
@@ -291,7 +389,7 @@
         const row = ws.getRow(rowNumber);
         const currentFormula = row.getCell(6).value;
         if (currentFormula && typeof currentFormula === "object" && currentFormula.formula) {
-          return { formula: currentFormula.formula.replace(/\$?F(?=\$?\d|:)/g, match => match.includes("$") ? "$P" : "P") };
+          return { formula: currentFormula.formula.replace(/(\$?)F(?=(?:\$?\d+|:|,|\)))/g, '$1P') };
         }
         const title = getSafeText(row.getCell(2)).trim();
         const marker = title.match(/^(?:小計|合計|總價|總計)[（(]([\s\S]+?)[）)]/);
@@ -327,6 +425,58 @@
           }
         }
         return { formula: `SUMIFS(P:P,A:A,"<>",D:D,"<>")` };
+      }
+
+      function summaryBudgetFormula(ws, rowNumber) {
+        const row = ws.getRow(rowNumber);
+        const current = row.getCell(6).value;
+        if (current && typeof current === 'object' && current.formula) return current;
+        const title = getSafeText(row.getCell(2)).trim();
+        const marker = title.match(/^(?:小計|合計|總價|總計)[（(]([\s\S]+?)[）)]/);
+        if (marker) {
+          const target = marker[1].replace(/[\s　]/g, '');
+          const range = target.match(/^(.+?)[~～至](.+)$/);
+          if (range) {
+            const startParts = normalizeHierarchyCode(range[1]).split('.');
+            const endParts = normalizeHierarchyCode(range[2]).split('.');
+            const startNumber = pccesSegmentNumber(startParts[startParts.length - 1]);
+            const endNumber = pccesSegmentNumber(endParts[endParts.length - 1]);
+            const parentStart = startParts.slice(0, -1).join('.');
+            const parentEnd = endParts.slice(0, -1).join('.');
+            if (parentStart === parentEnd && startNumber !== null && endNumber !== null) {
+              const groups = new Set();
+              for (let index = DATA_START_ROW; index < rowNumber; index++) {
+                const code = normalizeHierarchyCode(getSafeText(ws.getRow(index).getCell(1)));
+                const parts = code.split('.');
+                if (parts.length !== startParts.length || parts.slice(0, -1).join('.') !== parentStart) continue;
+                const segment = pccesSegmentNumber(parts[parts.length - 1]);
+                if (segment !== null && segment >= Math.min(startNumber, endNumber) && segment <= Math.max(startNumber, endNumber)) groups.add(code);
+              }
+              if (groups.size) return { formula: [...groups].map(code => `SUMIFS(F:F,A:A,"${escapeFormulaText(code)}.*",D:D,"<>")`).join('+') };
+            }
+          }
+          for (let index = rowNumber - 1; index >= DATA_START_ROW; index--) {
+            const candidate = ws.getRow(index);
+            const code = getSafeText(candidate.getCell(1)).trim().replace(/[.．]+$/g, '');
+            const description = comparableSummaryText(summaryTarget(getSafeText(candidate.getCell(2))));
+            const targetText = comparableSummaryText(target);
+            if (code && numericValue(candidate.getCell(4)) === null && description && (targetText.includes(description) || description.includes(targetText))) {
+              return { formula: `SUMIFS(F:F,A:A,"${escapeFormulaText(code)}.*",D:D,"<>")` };
+            }
+          }
+        }
+        return { formula: `SUMIFS(F:F,A:A,"<>",D:D,"<>")` };
+      }
+
+      function repairRemainingSummaryFormulas(ws) {
+        for (let rowNumber = DATA_START_ROW; rowNumber <= ws.rowCount; rowNumber++) {
+          const row = ws.getRow(rowNumber);
+          if (!summaryRowKind(row)) continue;
+          const value = row.getCell(6).value;
+          if (value && typeof value === 'object' && value.formula) continue;
+          row.getCell(6).value = summaryBudgetFormula(ws, rowNumber);
+          row.getCell(6).numFmt = '#,##0';
+        }
       }
 
       function remapFormulaRows(formula, mapRow) {
@@ -429,8 +579,226 @@
         return null;
       }
 
+      function normalizeHierarchyCode(value) {
+        return String(value || '')
+          .replace(/[．。]/g, '.')
+          .replace(/[\s　]/g, '')
+          .replace(/\.+$/g, '');
+      }
+
+      function hierarchyKind(code) {
+        const normalized = normalizeHierarchyCode(code);
+        if (!isPccesHierarchyCode(normalized)) return null;
+        const parts = normalized.split('.').filter(Boolean);
+        if (parts.length === 2) return 'grandTotal';
+        if (parts.length === 3) return 'total';
+        if (parts.length === 4) return 'subtotal';
+        return null;
+      }
+
+      function isPccesHierarchyCode(code) {
+        const parts = normalizeHierarchyCode(code).split('.').filter(Boolean);
+        return parts.length > 0 && parts.every(part => pccesSegmentNumber(part) !== null);
+      }
+
+      function summaryPrefix(kind) {
+        return kind === 'subtotal' ? '小計' : kind === 'total' ? '合計' : '總計';
+      }
+
+      function summaryTarget(label) {
+        const text = String(label || '').trim();
+        const match = text.match(/^(?:小計|合計|總計|總價)\s*[（(]/);
+        if (!match) return text.replace(/^(?:小計|合計|總計|總價)\s*/, '').trim();
+        return text.slice(match[0].length).replace(/[）)]\s*$/, '').trim();
+      }
+
+      function comparableSummaryText(value) {
+        return String(value || '')
+          .replace(/[\s　]/g, '')
+          .replace(/[（()）【】\[\]：:，,、]/g, '')
+          .toLowerCase();
+      }
+
+      function captureWorksheetFormulas(ws) {
+        const formulas = [];
+        ws.eachRow({ includeEmpty: false }, (row, rowNumber) => row.eachCell({ includeEmpty: false }, cell => {
+          if (cell.value && typeof cell.value === 'object' && cell.value.formula) {
+            formulas.push({ row: rowNumber, col: cell.col, value: { ...cell.value } });
+          }
+        }));
+        return formulas;
+      }
+
+      function insertWorksheetRow(ws, rowNumber) {
+        const formulas = captureWorksheetFormulas(ws);
+        ws.spliceRows(rowNumber, 0, []);
+        const mapRow = originalRow => originalRow >= rowNumber ? originalRow + 1 : originalRow;
+        formulas.forEach(item => {
+          const destination = ws.getRow(mapRow(item.row)).getCell(item.col);
+          destination.value = { ...item.value, formula: remapFormulaRows(item.value.formula, mapRow) };
+        });
+      }
+
+      function removeWorksheetRows(ws, rowNumbers) {
+        const removed = [...new Set(rowNumbers)].sort((left, right) => left - right);
+        if (!removed.length) return;
+        const removedSet = new Set(removed);
+        const formulas = captureWorksheetFormulas(ws);
+        for (let index = removed.length - 1; index >= 0; index--) ws.spliceRows(removed[index], 1);
+        const mapRow = originalRow => Math.max(DATA_START_ROW, originalRow - removed.filter(row => row < originalRow).length);
+        formulas.forEach(item => {
+          if (removedSet.has(item.row)) return;
+          const destination = ws.getRow(mapRow(item.row)).getCell(item.col);
+          destination.value = { ...item.value, formula: remapFormulaRows(item.value.formula, mapRow) };
+        });
+      }
+
+      function findCategoryRow(ws, normalizedCode) {
+        for (let rowNumber = DATA_START_ROW; rowNumber <= ws.rowCount; rowNumber++) {
+          const row = ws.getRow(rowNumber);
+          if (!isCategoryRow(row)) continue;
+          if (normalizeHierarchyCode(getSafeText(row.getCell(1))) === normalizedCode) return rowNumber;
+        }
+        return null;
+      }
+
+      function findCategoryBoundary(ws, headerRowNumber, depth) {
+        for (let rowNumber = headerRowNumber + 1; rowNumber <= ws.rowCount; rowNumber++) {
+          const row = ws.getRow(rowNumber);
+          const code = normalizeHierarchyCode(getSafeText(row.getCell(1)));
+          if (!isPccesHierarchyCode(code)) continue;
+          const parts = code.split('.').filter(Boolean);
+          if (parts.length && parts.length <= depth) return rowNumber;
+        }
+        return ws.rowCount + 1;
+      }
+
+      function buildHierarchyCategories(ws) {
+        const categories = [];
+        for (let rowNumber = DATA_START_ROW; rowNumber <= ws.rowCount; rowNumber++) {
+          const row = ws.getRow(rowNumber);
+          if (!isCategoryRow(row)) continue;
+          const rawCode = getSafeText(row.getCell(1)).trim().replace(/[.．]+$/g, '');
+          const normalizedCode = normalizeHierarchyCode(rawCode);
+          const parts = normalizedCode.split('.').filter(Boolean);
+          const kind = hierarchyKind(normalizedCode);
+          if (!kind) continue;
+          categories.push({
+            originalRow: rowNumber,
+            rawCode,
+            normalizedCode,
+            depth: parts.length,
+            kind,
+            description: summaryTarget(getSafeText(row.getCell(2)))
+          });
+        }
+        categories.forEach(category => {
+          category.boundary = findCategoryBoundary(ws, category.originalRow, category.depth);
+          category.descriptionKey = comparableSummaryText(category.description);
+        });
+        return categories;
+      }
+
+      function hierarchyFormulaCode(row) {
+        const value = row.getCell(6).value;
+        const formula = value && typeof value === 'object' && value.formula ? value.formula.replace(/\s/g, '') : '';
+        const match = formula.match(/^SUMIFS\(F:F,A:A,"([^"]+)\.\*",D:D,"<>"\)$/i);
+        return match ? normalizeHierarchyCode(match[1]) : null;
+      }
+
+      function deduplicateHierarchySummaries(ws) {
+        const rowsByCode = new Map();
+        for (let rowNumber = DATA_START_ROW; rowNumber <= ws.rowCount; rowNumber++) {
+          const row = ws.getRow(rowNumber);
+          if (getSafeText(row.getCell(1)).trim() !== '' || !summaryRowKind(row)) continue;
+          const code = hierarchyFormulaCode(row);
+          if (!code || !isPccesHierarchyCode(code)) continue;
+          if (!rowsByCode.has(code)) rowsByCode.set(code, []);
+          rowsByCode.get(code).push(rowNumber);
+        }
+
+        const rowsToRemove = [];
+        rowsByCode.forEach((rowNumbers, code) => {
+          if (rowNumbers.length < 2) return;
+          const headerRowNumber = findCategoryRow(ws, code);
+          if (!headerRowNumber) {
+            rowsToRemove.push(...rowNumbers.slice(0, -1));
+            return;
+          }
+          const depth = code.split('.').filter(Boolean).length;
+          const boundary = findCategoryBoundary(ws, headerRowNumber, depth);
+          const inSection = rowNumbers.filter(rowNumber => rowNumber > headerRowNumber && rowNumber < boundary);
+          const keepRow = inSection.length ? Math.max(...inSection) : rowNumbers[0];
+          rowsToRemove.push(...rowNumbers.filter(rowNumber => rowNumber !== keepRow));
+        });
+        removeWorksheetRows(ws, rowsToRemove);
+        return rowsToRemove.length;
+      }
+
+      function repairHierarchySummaries(ws) {
+        const existingCategories = buildHierarchyCategories(ws);
+        const categoryByCode = new Map(existingCategories.map(category => [category.normalizedCode, category]));
+        const rowsToRemove = [];
+        for (let rowNumber = DATA_START_ROW; rowNumber <= ws.rowCount; rowNumber++) {
+          const row = ws.getRow(rowNumber);
+          if (getSafeText(row.getCell(1)).trim() !== '' || !summaryRowKind(row)) continue;
+          const formulaCode = hierarchyFormulaCode(row);
+          if (formulaCode && (categoryByCode.has(formulaCode) || !isPccesHierarchyCode(formulaCode))) {
+            rowsToRemove.push(rowNumber);
+            continue;
+          }
+          const targetKey = comparableSummaryText(summaryTarget(getSafeText(row.getCell(2))));
+          const matchesCategory = existingCategories.some(category =>
+            targetKey.length >= 4 &&
+            (targetKey === category.descriptionKey || targetKey.includes(category.descriptionKey) || category.descriptionKey.includes(targetKey)) &&
+            rowNumber > category.originalRow &&
+            rowNumber < category.boundary
+          );
+          if (matchesCategory) rowsToRemove.push(rowNumber);
+        }
+        removeWorksheetRows(ws, rowsToRemove);
+
+        const categories = buildHierarchyCategories(ws);
+        const ordered = [...categories].sort((left, right) => right.depth - left.depth || right.originalRow - left.originalRow);
+        let insertedRows = 0;
+        for (const category of ordered) {
+          const headerRowNumber = findCategoryRow(ws, category.normalizedCode);
+          if (!headerRowNumber) continue;
+          const headerRow = ws.getRow(headerRowNumber);
+          const headerLabel = getSafeText(headerRow.getCell(2)).trim();
+          if (/^(小計|合計|總計|總價)/.test(headerLabel)) headerRow.getCell(2).value = category.description;
+          const headerAmount = headerRow.getCell(6).value;
+          if (headerAmount && typeof headerAmount === 'object' && headerAmount.formula && headerAmount.formula.includes(category.rawCode)) {
+            headerRow.getCell(6).value = null;
+          }
+
+          const targetRowNumber = findCategoryBoundary(ws, headerRowNumber, category.depth);
+          const formatSource = ws.getRow(headerRowNumber);
+          const lastColumn = Math.max(7, ws.columnCount);
+          const formatSnapshot = [];
+          for (let column = 1; column <= lastColumn; column++) {
+            formatSnapshot.push(formatSource.getCell(column).style ? JSON.parse(JSON.stringify(formatSource.getCell(column).style)) : {});
+          }
+          const sourceHeight = formatSource.height || 15;
+          insertWorksheetRow(ws, targetRowNumber);
+          const inserted = ws.getRow(targetRowNumber);
+          inserted.values = [];
+          inserted.height = sourceHeight;
+          for (let column = 1; column <= lastColumn; column++) inserted.getCell(column).style = formatSnapshot[column - 1];
+          insertedRows++;
+
+          const targetRow = ws.getRow(targetRowNumber);
+          targetRow.getCell(1).value = null;
+          targetRow.getCell(2).value = `${summaryPrefix(category.kind)}(${category.description})`;
+          targetRow.getCell(6).value = { formula: `SUMIFS(F:F,A:A,"${escapeFormulaText(category.rawCode)}.*",D:D,"<>")` };
+          targetRow.getCell(6).numFmt = '#,##0';
+        }
+        const removedDuplicates = deduplicateHierarchySummaries(ws);
+        return { categories: categories.length, removedRows: rowsToRemove.length + removedDuplicates, insertedRows };
+      }
+
       function applySummaryRowHighlights(ws) {
-        const fills = { subtotal: 'FFFFF2CC', total: 'FFDDEBF7', grandTotal: 'FFE2F0D9' };
+        const fills = { subtotal: 'FFFFF2CC', total: 'FFDDEBF7', grandTotal: 'FFFCE4D6' };
         let lastColumn = 7;
         ws.eachRow({ includeEmpty: false }, row => row.eachCell({ includeEmpty: false }, cell => {
           lastColumn = Math.max(lastColumn, cell.col);
@@ -441,13 +809,27 @@
           if (!kind) continue;
           for (let column = 1; column <= lastColumn; column++) {
             const cell = row.getCell(column);
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fills[kind] } };
-            cell.font = { ...cell.font, bold: true };
+            const currentStyle = cell.style ? JSON.parse(JSON.stringify(cell.style)) : {};
+            cell.style = {
+              ...currentStyle,
+              fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: fills[kind] } },
+              font: { ...(currentStyle.font || {}), bold: true }
+            };
           }
         }
       }
 
-      async function processBudgetSheet(ws) {
+      function freezeBudgetPane(ws) {
+        ws.views = [{
+          state: 'frozen',
+          xSplit: 3,
+          ySplit: 8,
+          topLeftCell: 'D9',
+          activeCell: 'D9'
+        }];
+      }
+
+      async function processBudgetSheet(ws, options = {}) {
         const originalLastRow = ws.rowCount;
         const formulas = [];
         ws.eachRow({ includeEmpty: false }, (row, rowNumber) => row.eachCell({ includeEmpty: false }, cell => {
@@ -480,8 +862,13 @@
           row.hidden = true;
           row.height = Math.max(row.height || 0, 15.01);
         }
+        if (options.repairHierarchy) {
+          repairHierarchySummaries(ws);
+          repairRemainingSummaryFormulas(ws);
+        }
         await fitWrappedRowHeights(ws);
         applySummaryRowHighlights(ws);
+        freezeBudgetPane(ws);
       }
 
       
@@ -531,16 +918,14 @@
           ps.addRows(rows);
       }
 
-      async function downloadExcel(wb, suffix) {
+      async function downloadExcel(wb, suffix, sourceFile) {
         const b = await wb.xlsx.writeBuffer();
         const blob = new Blob([b], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
         const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-        let name = "result";
-        if(document.getElementById('file').files.length > 0) {
-            name = document.getElementById('file').files[0].name.replace(/\.xls(x)?$/i, "");
-        }
+        const name = sourceFile && sourceFile.name ? sourceFile.name.replace(/\.xlsx$/i, "") : "result";
         a.download = name + suffix;
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
       }
 
       function toggleUI(loading) {
