@@ -140,13 +140,13 @@
 
           <h4>功能1：合併與格式化</h4>
           <ul>
-            <li>保留「預算詳細表」中的小計、合計及總計列，不以A欄空白作為刪除條件。</li>
+            <li>保留「預算詳細表」或「標單詳細表」中的小計、合計及總計列，不以A欄空白作為刪除條件。</li>
             <li>依A欄編號的階層辨識全部工程分類。第二層為總計、第三層為合計、第四層為小計。</li>
             <li>分類名稱保留在階層開頭；小計、合計及總計放在各階層最後一筆明細的下一列。</li>
             <li>優先修正位於階層末端的既有摘要列；缺少摘要列時才新增一列，不會在同一階層重複新增。</li>
             <li>加總公式只納入具有數量的實際明細，避免重複計入下層小計與合計。</li>
             <li>B欄自動換行並依文字調整列高，欄寬維持原檔設定；第1至第7列會隱藏。</li>
-            <li>三個功能都會將「預算詳細表」凍結在D9，固定第1至第8列及A至C欄。</li>
+            <li>三個功能都會將辨識到的詳細表凍結在D9，固定第1至第8列及A至C欄。</li>
           </ul>
           <div class="legend" aria-label="摘要列顏色說明">
             <span class="legend-swatch" style="background:#fff2cc"></span><span>小計：淺黃色</span>
@@ -161,7 +161,7 @@
           <p>依費用性質關鍵字整理明細，新增「樞紐分析專用表」工作表，供後續篩選與分析使用。</p>
 
           <h4>檔案條件</h4>
-          <p>三個功能都只接受內容完整的 .xlsx 檔案，且必須包含名稱完全相同的「預算詳細表」工作表及正確的第8列標題。</p>
+          <p>三個功能都只接受內容完整的 .xlsx 檔案，且必須包含「預算詳細表」或「標單詳細表」工作表及正確的第8列標題。</p>
         </div>
       </div>
     </div>
@@ -257,7 +257,11 @@
       function isSummaryRow(row) {
         const a = getSafeText(row.getCell(1)).trim();
         const b = getSafeText(row.getCell(2)).trim();
-        return !a && (/^(小計|合計|總計|總價)/.test(b) || row.getCell(6).value !== null && row.getCell(6).value !== undefined && row.getCell(6).value !== "");
+        const f = getSafeText(row.getCell(6)).trim();
+        // Continuation rows have text in B and often retain a legacy F formula;
+        // they must still be merged into the preceding item instead of being
+        // mistaken for summary rows.
+        return !a && (/^(小計|合計|總計|總價)/.test(b) || (!b && f !== ""));
       }
 
       function detectFileKind(file, buffer) {
@@ -280,11 +284,11 @@
       }
 
       function validateWorkbook(workbook) {
-        const ws = workbook.getWorksheet("預算詳細表");
-        if (!ws) throw new Error("找不到名稱完全符合「預算詳細表」的工作表。請確認工作表名稱。");
+        const ws = workbook.getWorksheet("預算詳細表") || workbook.getWorksheet("標單詳細表");
+        if (!ws) throw new Error("找不到「預算詳細表」或「標單詳細表」工作表。請確認工作表名稱。");
         const actual = REQUIRED_HEADERS.map((_, index) => normalizeHeader(getSafeText(ws.getRow(8).getCell(index + 1))));
         const missing = REQUIRED_HEADERS.filter((header, index) => actual[index] !== normalizeHeader(header));
-        if (missing.length) throw new Error("第 8 列標題與預期格式不符（需有項次、項目及說明、單位、數量、單價、複價）。請確認上傳的是 PCCES 預算詳細表。");
+        if (missing.length) throw new Error("第 8 列標題與預期格式不符（需有項次、項目及說明、單位、數量、單價、複價）。請確認上傳的是 PCCES 預算詳細表或標單詳細表。");
         return ws;
       }
 
@@ -341,10 +345,12 @@
               header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF7' } };
               header.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
             }
+            const structuralCategoryRows = new Set(buildHierarchyCategories(worksheet).map(category => findCategoryRow(worksheet, category.normalizedCode)).filter(Boolean));
             for (let i = DATA_START_ROW; i <= worksheet.rowCount; i++) {
               const row = worksheet.getRow(i);
               const id = getSafeText(row.getCell(1)).trim();
-              if (isItemRow(row)) {
+              const structuralCategory = structuralCategoryRows.has(i);
+              if (isItemRow(row) && !structuralCategory) {
                 row.getCell(9).value = { formula: `D${i}` };
                 row.getCell(11).value = { formula: `I${i}*J${i}` };
                 row.getCell(12).value = inputRate;
@@ -355,9 +361,10 @@
                 row.getCell(5).value = { formula: `O${i}` };
                 row.getCell(6).value = { formula: `ROUND(D${i}*E${i},0)` };
               } else if (isSummaryRow(row)) {
+                row.getCell(6).value = summaryBudgetFormula(worksheet, i);
                 row.getCell(16).value = summaryPriceFormula(worksheet, i);
               }
-              if (isItemRow(row) || isSummaryRow(row)) {
+              if ((isItemRow(row) && !structuralCategory) || isSummaryRow(row)) {
                 row.getCell(8).value = { formula: `IF(ROUND(F${i},2)=ROUND(P${i},2),"","金額不符")` };
                 for (let col = 9; col <= 16; col++) {
                   const cell = row.getCell(col);
@@ -474,6 +481,62 @@
           if (!summaryRowKind(row)) continue;
           const value = row.getCell(6).value;
           if (value && typeof value === 'object' && value.formula) continue;
+          row.getCell(6).value = summaryBudgetFormula(ws, rowNumber);
+          row.getCell(6).numFmt = '#,##0';
+        }
+      }
+
+      // Summary formulas are rebuilt with bounded ranges so a summary cell can
+      // never include itself through a full-column SUMIFS reference.
+      function summaryFormulaBounds(rowNumber) {
+        return { start: DATA_START_ROW, end: rowNumber - 1 };
+      }
+
+      function boundedHierarchySumFormula(column, code, rowNumber) {
+        const { start, end } = summaryFormulaBounds(rowNumber);
+        if (end < start) return '0';
+        return `SUMIFS($${column}$${start}:$${column}$${end},$A$${start}:$A$${end},"${escapeFormulaText(code)}.*",$D$${start}:$D$${end},"<>")`;
+      }
+
+      function boundedOverallSumFormula(column, rowNumber) {
+        const { start, end } = summaryFormulaBounds(rowNumber);
+        if (end < start) return '0';
+        return `SUMIFS($${column}$${start}:$${column}$${end},$A$${start}:$A$${end},"<>",$D$${start}:$D$${end},"<>")`;
+      }
+
+      function summaryHierarchyCode(ws, rowNumber) {
+        const row = ws.getRow(rowNumber);
+        const explicitCode = hierarchyFormulaCode(row);
+        if (explicitCode && isPccesHierarchyCode(explicitCode)) return explicitCode;
+        const targetText = comparableSummaryText(summaryTarget(getSafeText(row.getCell(2))));
+        if (!targetText) return null;
+        for (let index = rowNumber - 1; index >= DATA_START_ROW; index--) {
+          const candidate = ws.getRow(index);
+          const code = normalizeHierarchyCode(getSafeText(candidate.getCell(1)));
+          const kind = hierarchyKind(code);
+          if (!kind || summaryRowKind(candidate)) continue;
+          const description = comparableSummaryText(getSafeText(candidate.getCell(2)));
+          if (description && (targetText === description || targetText.includes(description) || description.includes(targetText))) return code;
+        }
+        return null;
+      }
+
+      // These later definitions intentionally override the legacy unbounded
+      // versions above while keeping compatibility with old input labels.
+      function summaryPriceFormula(ws, rowNumber) {
+        const code = summaryHierarchyCode(ws, rowNumber);
+        return { formula: code ? boundedHierarchySumFormula('P', code, rowNumber) : boundedOverallSumFormula('P', rowNumber) };
+      }
+
+      function summaryBudgetFormula(ws, rowNumber) {
+        const code = summaryHierarchyCode(ws, rowNumber);
+        return { formula: code ? boundedHierarchySumFormula('F', code, rowNumber) : boundedOverallSumFormula('F', rowNumber) };
+      }
+
+      function repairRemainingSummaryFormulas(ws) {
+        for (let rowNumber = DATA_START_ROW; rowNumber <= ws.rowCount; rowNumber++) {
+          const row = ws.getRow(rowNumber);
+          if (!summaryRowKind(row)) continue;
           row.getCell(6).value = summaryBudgetFormula(ws, rowNumber);
           row.getCell(6).numFmt = '#,##0';
         }
@@ -607,7 +670,7 @@
 
       function summaryTarget(label) {
         const text = String(label || '').trim();
-        const match = text.match(/^(?:小計|合計|總計|總價)\s*[（(]/);
+        const match = text.match(/^(?:(?:小計|合計|總計|總價)\s*)+[（(]/);
         if (!match) return text.replace(/^(?:小計|合計|總計|總價)\s*/, '').trim();
         return text.slice(match[0].length).replace(/[）)]\s*$/, '').trim();
       }
@@ -627,6 +690,27 @@
           }
         }));
         return formulas;
+      }
+
+      function expandSharedFormulas(ws) {
+        const replacements = [];
+        ws.eachRow({ includeEmpty: false }, row => row.eachCell({ includeEmpty: false }, cell => {
+          const value = cell.value;
+          if (!value || typeof value !== 'object') return;
+          if (value.sharedFormula) {
+            const formula = cell.formula;
+            if (!formula) throw new Error(`無法展開共享公式：${ws.name}!${cell.address}`);
+            const replacement = { formula };
+            if (value.result !== undefined) replacement.result = value.result;
+            replacements.push({ cell, value: replacement });
+          } else if (value.formula && value.shareType === 'shared') {
+            const replacement = { formula: value.formula };
+            if (value.result !== undefined) replacement.result = value.result;
+            replacements.push({ cell, value: replacement });
+          }
+        }));
+        replacements.forEach(item => { item.cell.value = item.value; });
+        return replacements.length;
       }
 
       function insertWorksheetRow(ws, rowNumber) {
@@ -702,7 +786,7 @@
       function hierarchyFormulaCode(row) {
         const value = row.getCell(6).value;
         const formula = value && typeof value === 'object' && value.formula ? value.formula.replace(/\s/g, '') : '';
-        const match = formula.match(/^SUMIFS\(F:F,A:A,"([^"]+)\.\*",D:D,"<>"\)$/i);
+        const match = formula.match(/SUMIFS\([^,]+,[^,]+,"([^"]+)\.\*"/i);
         return match ? normalizeHierarchyCode(match[1]) : null;
       }
 
@@ -797,6 +881,127 @@
         return { categories: categories.length, removedRows: rowsToRemove.length + removedDuplicates, insertedRows };
       }
 
+      function findCategoryRow(ws, normalizedCode) {
+        const target = normalizeHierarchyCode(normalizedCode);
+        for (let rowNumber = DATA_START_ROW; rowNumber <= ws.rowCount; rowNumber++) {
+          const code = normalizeHierarchyCode(getSafeText(ws.getRow(rowNumber).getCell(1)));
+          if (code === target) return rowNumber;
+        }
+        return null;
+      }
+
+      function buildHierarchyCategories(ws) {
+        const codeRows = [];
+        for (let rowNumber = DATA_START_ROW; rowNumber <= ws.rowCount; rowNumber++) {
+          const code = normalizeHierarchyCode(getSafeText(ws.getRow(rowNumber).getCell(1)));
+          if (!isPccesHierarchyCode(code)) continue;
+          codeRows.push({ rowNumber, code, parts: code.split('.').filter(Boolean) });
+        }
+
+        const categories = [];
+        for (let index = 0; index < codeRows.length; index++) {
+          const entry = codeRows[index];
+          const kind = hierarchyKind(entry.code);
+          if (!kind) continue;
+          let boundary = ws.rowCount + 1;
+          let hasDescendant = false;
+          for (let next = index + 1; next < codeRows.length; next++) {
+            const following = codeRows[next];
+            if (following.parts.length <= entry.parts.length) {
+              boundary = following.rowNumber;
+              break;
+            }
+            if (following.code.startsWith(`${entry.code}.`)) hasDescendant = true;
+          }
+          if (!hasDescendant) continue;
+          const row = ws.getRow(entry.rowNumber);
+          const description = getSafeText(row.getCell(2)).trim();
+          categories.push({
+            originalRow: entry.rowNumber,
+            rawCode: entry.code,
+            normalizedCode: entry.code,
+            depth: entry.parts.length,
+            kind,
+            description,
+            descriptionKey: comparableSummaryText(description),
+            boundary
+          });
+        }
+        return categories;
+      }
+
+      function repairHierarchySummaries(ws) {
+        const initialCategories = buildHierarchyCategories(ws);
+        const categoryByCode = new Map(initialCategories.map(category => [category.normalizedCode, category]));
+        const duplicateRows = new Set();
+        const chosenRows = new Set();
+
+        function rowMatchesCategory(rowNumber, category) {
+          const row = ws.getRow(rowNumber);
+          if (getSafeText(row.getCell(1)).trim() !== '' || !summaryRowKind(row)) return false;
+          const formulaCode = hierarchyFormulaCode(row);
+          if (formulaCode && formulaCode === category.normalizedCode) return true;
+          const targetKey = comparableSummaryText(summaryTarget(getSafeText(row.getCell(2))));
+          return Boolean(category.descriptionKey && targetKey && (
+            targetKey === category.descriptionKey ||
+            targetKey.includes(category.descriptionKey) ||
+            category.descriptionKey.includes(targetKey)
+          ));
+        }
+
+        for (const category of initialCategories) {
+          const headerRowNumber = findCategoryRow(ws, category.normalizedCode);
+          if (!headerRowNumber) continue;
+          const boundary = findCategoryBoundary(ws, headerRowNumber, category.depth);
+          const matches = [];
+          for (let rowNumber = headerRowNumber + 1; rowNumber < boundary; rowNumber++) {
+            if (rowMatchesCategory(rowNumber, category)) matches.push(rowNumber);
+          }
+          if (matches.length) {
+            const keep = Math.max(...matches);
+            chosenRows.add(keep);
+            matches.filter(rowNumber => rowNumber !== keep).forEach(rowNumber => duplicateRows.add(rowNumber));
+          }
+        }
+        removeWorksheetRows(ws, [...duplicateRows]);
+
+        const ordered = [...initialCategories].sort((left, right) => right.depth - left.depth || right.originalRow - left.originalRow);
+        let insertedRows = 0;
+        for (const category of ordered) {
+          const headerRowNumber = findCategoryRow(ws, category.normalizedCode);
+          if (!headerRowNumber) continue;
+          const boundary = findCategoryBoundary(ws, headerRowNumber, category.depth);
+          let summaryRowNumber = null;
+          for (let rowNumber = headerRowNumber + 1; rowNumber < boundary; rowNumber++) {
+            if (rowMatchesCategory(rowNumber, category)) summaryRowNumber = rowNumber;
+          }
+
+          if (!summaryRowNumber) {
+            summaryRowNumber = boundary;
+            const source = ws.getRow(headerRowNumber);
+            const lastColumn = Math.max(7, ws.columnCount);
+            const styles = [];
+            for (let column = 1; column <= lastColumn; column++) {
+              const cell = source.getCell(column);
+              styles.push(cell.style ? JSON.parse(JSON.stringify(cell.style)) : {});
+            }
+            insertWorksheetRow(ws, summaryRowNumber);
+            const inserted = ws.getRow(summaryRowNumber);
+            inserted.height = source.height || 15;
+            for (let column = 1; column <= lastColumn; column++) inserted.getCell(column).style = styles[column - 1];
+            insertedRows++;
+          }
+
+          const summaryRow = ws.getRow(summaryRowNumber);
+          summaryRow.getCell(1).value = null;
+          summaryRow.getCell(2).value = `${summaryPrefix(category.kind)}(${category.description})`;
+          summaryRow.getCell(6).value = { formula: boundedHierarchySumFormula('F', category.normalizedCode, summaryRowNumber) };
+          summaryRow.getCell(6).numFmt = '#,##0';
+        }
+
+        return { categories: initialCategories.length, removedRows: duplicateRows.size, insertedRows };
+      }
+
       function applySummaryRowHighlights(ws) {
         const fills = { subtotal: 'FFFFF2CC', total: 'FFDDEBF7', grandTotal: 'FFFCE4D6' };
         let lastColumn = 7;
@@ -830,6 +1035,7 @@
       }
 
       async function processBudgetSheet(ws, options = {}) {
+        expandSharedFormulas(ws);
         const originalLastRow = ws.rowCount;
         const formulas = [];
         ws.eachRow({ includeEmpty: false }, (row, rowNumber) => row.eachCell({ includeEmpty: false }, cell => {
