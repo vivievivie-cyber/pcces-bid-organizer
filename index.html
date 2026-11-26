@@ -146,7 +146,7 @@
             <li>優先修正位於階層末端的既有摘要列；缺少摘要列時才新增一列，不會在同一階層重複新增。</li>
             <li>加總公式只納入具有數量的實際明細，避免重複計入下層小計與合計。</li>
             <li>B欄自動換行並依文字調整列高，欄寬維持原檔設定；第1至第7列會隱藏。</li>
-            <li>三個功能都會將辨識到的詳細表凍結在D9，固定第1至第8列及A至C欄。</li>
+            <li>功能1與功能3會將詳細表凍結在D9，固定第1至第8列及A至C欄；功能2保留輸入檔原有的凍結設定。</li>
           </ul>
           <div class="legend" aria-label="摘要列顏色說明">
             <span class="legend-swatch" style="background:#fff2cc"></span><span>小計：淺黃色</span>
@@ -155,7 +155,7 @@
           </div>
 
           <h4>功能2：成本分析與報價表</h4>
-          <p>在第8列後方建立成本與報價欄位。O欄報價單價使用ROUND四捨五入；P欄明細及所有小計、合計、總計都會依所屬階層計算，再與F欄進行金額比對。</p>
+          <p>建議先用功能1整理標單，再以其輸出檔執行功能2。功能2只建立H至P欄，並使明細列E欄等於O欄；保留F欄、既有小計、合計、總計列及其公式。O欄報價單價使用ROUND四捨五入，P欄摘要依既有F欄加總公式對應計算。</p>
 
           <h4>功能3：樞紐分析專用表</h4>
           <p>依費用性質關鍵字整理明細，新增「樞紐分析專用表」工作表，供後續篩選與分析使用。</p>
@@ -257,11 +257,7 @@
       function isSummaryRow(row) {
         const a = getSafeText(row.getCell(1)).trim();
         const b = getSafeText(row.getCell(2)).trim();
-        const f = getSafeText(row.getCell(6)).trim();
-        // Continuation rows have text in B and often retain a legacy F formula;
-        // they must still be merged into the preceding item instead of being
-        // mistaken for summary rows.
-        return !a && (/^(小計|合計|總計|總價)/.test(b) || (!b && f !== ""));
+        return !a && /^(小計|合計|總計|總價)/.test(b);
       }
 
       function detectFileKind(file, buffer) {
@@ -321,7 +317,12 @@
           const workbook = await loadWorkbook(file, buffer);
           workbook.eachSheet(sheet => { if (typeof sheet.unprotect === "function") sheet.unprotect(); });
           const worksheet = validateWorkbook(workbook);
-          await processBudgetSheet(worksheet, { repairHierarchy: mode === 'format' || mode === 'cost_analysis' });
+          if (mode !== 'cost_analysis') {
+            await processBudgetSheet(worksheet, { repairHierarchy: mode === 'format' });
+          } else {
+            // Function 2 keeps the worksheet rows and all existing F formulas.
+            expandSharedFormulas(worksheet);
+          }
 
           if (mode === 'format') {
             workbook.calcProperties.fullCalcOnLoad = true;
@@ -359,10 +360,12 @@
                 row.getCell(15).value = { formula: `ROUND(J${i}*L${i},0)` };
                 row.getCell(16).value = { formula: `N${i}*O${i}` };
                 row.getCell(5).value = { formula: `O${i}` };
-                row.getCell(6).value = { formula: `ROUND(D${i}*E${i},0)` };
               } else if (isSummaryRow(row)) {
-                row.getCell(6).value = summaryBudgetFormula(worksheet, i);
-                row.getCell(16).value = summaryPriceFormula(worksheet, i);
+                const budget = row.getCell(6).value;
+                const budgetFormula = budget && typeof budget === 'object' && budget.formula;
+                row.getCell(16).value = budgetFormula && /\bSUM(?:IF|IFS)?\s*\(/i.test(budgetFormula)
+                  ? { formula: budgetFormula.replace(/(\$?)F(?=\$?\d+)/g, '$1P') }
+                  : summaryPriceFormula(worksheet, i);
               }
               if ((isItemRow(row) && !structuralCategory) || isSummaryRow(row)) {
                 row.getCell(8).value = { formula: `IF(ROUND(F${i},2)=ROUND(P${i},2),"","金額不符")` };
@@ -374,8 +377,6 @@
                 }
               }
             }
-            await fitWrappedRowHeights(worksheet);
-            applySummaryRowHighlights(worksheet);
             worksheet.addConditionalFormatting({
               ref: `H${DATA_START_ROW}:H${worksheet.rowCount}`,
               rules: [{ type: 'expression', formulae: [`AND(ISNUMBER($F${DATA_START_ROW}),ISNUMBER($P${DATA_START_ROW}),ROUND($F${DATA_START_ROW},2)<>ROUND($P${DATA_START_ROW},2))`], style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFFF00' } }, font: { color: { argb: 'FF000000' } } } }]
@@ -1086,17 +1087,21 @@
           if (cell.value && typeof cell.value === "object" && cell.value.formula) formulas.push({ row: rowNumber, col: cell.col, value: { ...cell.value } });
         }));
         const removed = [];
+        let anchorRowNumber = null;
         for (let i = DATA_START_ROW; i <= originalLastRow; i++) {
           const row = ws.getRow(i);
           const id = getSafeText(row.getCell(1)).trim();
-          if (!id && !isSummaryRow(row)) {
-            const previous = ws.getRow(i - 1);
-            const currentB = getSafeText(row.getCell(2));
-            const currentG = getSafeText(row.getCell(7));
-            if (currentB) previous.getCell(2).value = [getSafeText(previous.getCell(2)), currentB].filter(Boolean).join('\n');
-            if (currentG) previous.getCell(7).value = [getSafeText(previous.getCell(7)), currentG].filter(Boolean).join('\n');
-            removed.push(i);
+          if (id) { anchorRowNumber = i; continue; }
+          if (isSummaryRow(row)) { anchorRowNumber = null; continue; }
+          const currentB = getSafeText(row.getCell(2)).trim();
+          const currentG = getSafeText(row.getCell(7)).trim();
+          if ((currentB || currentG) && anchorRowNumber === null) continue;
+          if (anchorRowNumber !== null) {
+            const anchor = ws.getRow(anchorRowNumber);
+            if (currentB) anchor.getCell(2).value = [getSafeText(anchor.getCell(2)), currentB].filter(Boolean).join('\n');
+            if (currentG) anchor.getCell(7).value = [getSafeText(anchor.getCell(7)), currentG].filter(Boolean).join('\n');
           }
+          removed.push(i);
         }
         for (let i = removed.length - 1; i >= 0; i--) ws.spliceRows(removed[i], 1);
         const mapRow = originalRow => originalRow < DATA_START_ROW ? originalRow : Math.max(DATA_START_ROW, originalRow - removed.filter(row => row < originalRow).length);
