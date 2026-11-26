@@ -318,7 +318,7 @@
           workbook.eachSheet(sheet => { if (typeof sheet.unprotect === "function") sheet.unprotect(); });
           const worksheet = validateWorkbook(workbook);
           if (mode !== 'cost_analysis') {
-            await processBudgetSheet(worksheet, { repairHierarchy: mode === 'format' });
+            await processBudgetSheet(worksheet, { repairHierarchy: mode === 'format', normalizeDescriptions: mode === 'format' });
           } else {
             // Function 2 keeps the worksheet rows and all existing F formulas.
             expandSharedFormulas(worksheet);
@@ -676,6 +676,27 @@
             fittedHeight = Math.max(fittedHeight, cellLineHeightPoints(cell, text, ws.getColumn(cell.col).width));
           });
           if (fittedHeight) row.height = Math.min(409, Math.max(15, fittedHeight));
+        }
+      }
+
+      function normalizeDescriptionText(text) {
+        return String(text).split(/\r\n?|\n/).reduce((result, part) => {
+          const next = part.trim();
+          if (!next) return result;
+          if (!result) return next;
+          const separator = /[）)】\]]$/.test(result) && /^[\p{L}\p{N}]/u.test(next)
+            || /[A-Za-z0-9]$/.test(result) && /^[A-Za-z]/.test(next) ? ' ' : '';
+          return result + separator + next;
+        }, '');
+      }
+
+      function normalizeBudgetDescriptions(ws) {
+        for (let rowNumber = DATA_START_ROW; rowNumber <= ws.rowCount; rowNumber++) {
+          const row = ws.getRow(rowNumber);
+          if (!getSafeText(row.getCell(1)).trim()) continue;
+          const cell = row.getCell(2);
+          const original = getSafeText(cell);
+          if (/[\r\n]/.test(original)) cell.value = normalizeDescriptionText(original);
         }
       }
 
@@ -1121,6 +1142,7 @@
           repairHierarchySummaries(ws);
           repairRemainingSummaryFormulas(ws);
         }
+        if (options.normalizeDescriptions) normalizeBudgetDescriptions(ws);
         await fitWrappedRowHeights(ws);
         applySummaryRowHighlights(ws);
         freezeBudgetPane(ws);
