@@ -504,11 +504,51 @@
         return `SUMIFS($${column}$${start}:$${column}$${end},$A$${start}:$A$${end},"<>",$D$${start}:$D$${end},"<>")`;
       }
 
+      function summaryCodeRange(ws, rowNumber) {
+        const label = getSafeText(ws.getRow(rowNumber).getCell(2)).replace(/[\s　]/g, '');
+        const range = label.match(/[（(\[【]([^~～至]+)[~～至]([^）)\]】]+)/);
+        if (!range) return [];
+        const startCode = normalizeHierarchyCode(range[1]);
+        const endCode = normalizeHierarchyCode(range[2]);
+        if (!isPccesHierarchyCode(startCode) || !isPccesHierarchyCode(endCode)) return [];
+        const startParts = startCode.split('.');
+        const endParts = endCode.split('.');
+        if (startParts.length !== endParts.length || startParts.slice(0, -1).join('.') !== endParts.slice(0, -1).join('.')) return [];
+        const first = pccesSegmentNumber(startParts.at(-1));
+        const last = pccesSegmentNumber(endParts.at(-1));
+        if (first === null || last === null) return [];
+        const codes = new Set();
+        for (let index = DATA_START_ROW; index < rowNumber; index++) {
+          const code = normalizeHierarchyCode(getSafeText(ws.getRow(index).getCell(1)));
+          const parts = code.split('.');
+          if (parts.length !== startParts.length || parts.slice(0, -1).join('.') !== startParts.slice(0, -1).join('.')) continue;
+          const value = pccesSegmentNumber(parts.at(-1));
+          if (value !== null && value >= Math.min(first, last) && value <= Math.max(first, last)) codes.add(code);
+        }
+        return [...codes];
+      }
+
+      function boundedCodeRangeSumFormula(column, codes, rowNumber) {
+        const { start, end } = summaryFormulaBounds(rowNumber);
+        return codes.flatMap(code => [code, `${code}.*`].map(criteria =>
+          `SUMIFS($${column}$${start}:$${column}$${end},$A$${start}:$A$${end},"${escapeFormulaText(criteria)}",$D$${start}:$D$${end},"<>")`
+        )).join('+');
+      }
+
       function summaryHierarchyCode(ws, rowNumber) {
         const row = ws.getRow(rowNumber);
+        if (summaryCodeRange(ws, rowNumber).length) return null;
+        const target = summaryTarget(getSafeText(row.getCell(2)));
+        const targetCode = normalizeHierarchyCode(target);
+        // PCCES may name a subtotal by its A-column item code instead of
+        // repeating the category description, e.g. 小計(壹.二).
+        if (isPccesHierarchyCode(targetCode)) {
+          const headerRowNumber = findCategoryRow(ws, targetCode);
+          if (headerRowNumber !== null && headerRowNumber < rowNumber) return targetCode;
+        }
         const explicitCode = hierarchyFormulaCode(row);
         if (explicitCode && isPccesHierarchyCode(explicitCode)) return explicitCode;
-        const targetText = comparableSummaryText(summaryTarget(getSafeText(row.getCell(2))));
+        const targetText = comparableSummaryText(target);
         if (!targetText) return null;
         for (let index = rowNumber - 1; index >= DATA_START_ROW; index--) {
           const candidate = ws.getRow(index);
@@ -525,12 +565,16 @@
       // versions above while keeping compatibility with old input labels.
       function summaryPriceFormula(ws, rowNumber) {
         const code = summaryHierarchyCode(ws, rowNumber);
-        return { formula: code ? boundedHierarchySumFormula('P', code, rowNumber) : boundedOverallSumFormula('P', rowNumber) };
+        if (code) return { formula: boundedHierarchySumFormula('P', code, rowNumber) };
+        const codes = summaryCodeRange(ws, rowNumber);
+        return { formula: codes.length ? boundedCodeRangeSumFormula('P', codes, rowNumber) : boundedOverallSumFormula('P', rowNumber) };
       }
 
       function summaryBudgetFormula(ws, rowNumber) {
         const code = summaryHierarchyCode(ws, rowNumber);
-        return { formula: code ? boundedHierarchySumFormula('F', code, rowNumber) : boundedOverallSumFormula('F', rowNumber) };
+        if (code) return { formula: boundedHierarchySumFormula('F', code, rowNumber) };
+        const codes = summaryCodeRange(ws, rowNumber);
+        return { formula: codes.length ? boundedCodeRangeSumFormula('F', codes, rowNumber) : boundedOverallSumFormula('F', rowNumber) };
       }
 
       function repairRemainingSummaryFormulas(ws) {
